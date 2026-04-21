@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin-schema.json",
+  "name": "cryptozavr",
+  "version": "0.0.1",
+  "description": "Risk-first crypto market research plugin for Claude Code. Read-only MVP with KuCoin + CoinGecko providers, Supabase-backed cache and audit trail.",
+  "author": {
+    "name": "cryptozavr",
+    "email": "e.a.gurin@outlook.com"
+  },
+  "license": "MIT",
+  "keywords": ["crypto", "market-data", "research", "fastmcp", "supabase", "mcp"],
+  "mcpServers": ["cryptozavr-research"],
+  "skills": "skills/",
+  "commands": "commands/",
+  "hooks": "hooks/"
+}
