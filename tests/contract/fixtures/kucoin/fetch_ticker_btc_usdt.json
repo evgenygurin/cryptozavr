@@ -1,0 +1,22 @@
+{
+  "symbol": "BTC/USDT",
+  "timestamp": 1745200800000,
+  "datetime": "2026-04-21T10:00:00.000Z",
+  "high": 66000.0,
+  "low": 64000.0,
+  "bid": 64999.5,
+  "bidVolume": 1.0,
+  "ask": 65001.5,
+  "askVolume": 0.5,
+  "vwap": 65000.0,
+  "open": 63400.0,
+  "close": 65000.5,
+  "last": 65000.5,
+  "previousClose": 63400.0,
+  "change": 1600.5,
+  "percentage": 2.524,
+  "average": 64200.25,
+  "baseVolume": 1234.56,
+  "quoteVolume": 80246412.34,
+  "info": {}
+}
