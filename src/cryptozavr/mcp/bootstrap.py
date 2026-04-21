@@ -1,15 +1,15 @@
 """Production wiring for the MCP server.
 
 Creates infrastructure (HTTP, rate limiters, symbol registry, venue states,
-gateway, providers), assembles a TickerService, and returns a cleanup
-coroutine the caller must await on shutdown.
+gateway, providers, realtime subscriber) and yields a single dict keyed
+by `LIFESPAN_KEYS` for Depends(get_xxx_service) injection.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from typing import Any
 
 from supabase import AsyncClient, acreate_client
 
@@ -31,33 +31,21 @@ from cryptozavr.infrastructure.supabase.pg_pool import (
     create_pool,
 )
 from cryptozavr.infrastructure.supabase.realtime import RealtimeSubscriber
+from cryptozavr.mcp.lifespan_state import LIFESPAN_KEYS
 from cryptozavr.mcp.settings import Settings
 
 _LOG = logging.getLogger(__name__)
 
 
-@dataclass(slots=True)
-class AppState:
-    """Lifespan-scoped application state exposed to tools."""
-
-    ticker_service: TickerService
-    ohlcv_service: OhlcvService
-    order_book_service: OrderBookService
-    trades_service: TradesService
-    subscriber: RealtimeSubscriber
-
-
 async def build_production_service(
     settings: Settings,
-) -> tuple[
-    TickerService,
-    OhlcvService,
-    OrderBookService,
-    TradesService,
-    RealtimeSubscriber,
-    Callable[[], Awaitable[None]],
-]:
-    """Build production TickerService + OhlcvService and a cleanup coroutine."""
+) -> tuple[dict[str, Any], Callable[[], Awaitable[None]]]:
+    """Build production state + cleanup coroutine.
+
+    Returns a plain dict keyed by LIFESPAN_KEYS so tools can
+    Depends(get_xxx_service) into it. The caller (server.py) yields
+    this dict from its @asynccontextmanager lifespan.
+    """
     http_registry = HttpClientRegistry()
 
     rate_registry = RateLimiterRegistry()
@@ -65,7 +53,6 @@ async def build_production_service(
     rate_registry.register("coingecko", rate_per_sec=0.5, capacity=30)
 
     registry = SymbolRegistry()
-    # MVP seed — extend to DB-driven in M2.5+.
     registry.get(
         VenueId.KUCOIN,
         "BTC",
@@ -133,6 +120,16 @@ async def build_production_service(
     )
     subscriber = RealtimeSubscriber(client=supabase_client)
 
+    state: dict[str, Any] = {
+        LIFESPAN_KEYS.ticker_service: ticker_service,
+        LIFESPAN_KEYS.ohlcv_service: ohlcv_service,
+        LIFESPAN_KEYS.order_book_service: order_book_service,
+        LIFESPAN_KEYS.trades_service: trades_service,
+        LIFESPAN_KEYS.subscriber: subscriber,
+        LIFESPAN_KEYS.registry: registry,
+        # symbol_resolver + discovery_service populated by M3.2 resume.
+    }
+
     async def cleanup() -> None:
         _LOG.info("cryptozavr shutting down")
         try:
@@ -152,11 +149,4 @@ async def build_production_service(
         except Exception as exc:
             _LOG.warning("pg pool close failed: %s", exc)
 
-    return (
-        ticker_service,
-        ohlcv_service,
-        order_book_service,
-        trades_service,
-        subscriber,
-        cleanup,
-    )
+    return state, cleanup

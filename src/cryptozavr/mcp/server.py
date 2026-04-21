@@ -1,6 +1,7 @@
-"""FastMCP server bootstrap: echo + get_ticker + get_ohlcv.
+"""FastMCP server bootstrap: echo + 4 market-data tools.
 
-Uses FastMCP v3 lifespan to own TickerService and OhlcvService lifecycle.
+Uses FastMCP v3 lifespan (dict-yield) + mask_error_details for
+production safety.
 """
 
 from __future__ import annotations
@@ -9,13 +10,13 @@ import logging
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastmcp import FastMCP
 from pydantic import Field
 
 from cryptozavr import __version__
-from cryptozavr.mcp.bootstrap import AppState, build_production_service
+from cryptozavr.mcp.bootstrap import build_production_service
 from cryptozavr.mcp.settings import Settings
 from cryptozavr.mcp.tools.ohlcv import register_ohlcv_tool
 from cryptozavr.mcp.tools.order_book import register_order_book_tool
@@ -25,7 +26,7 @@ from cryptozavr.mcp.tools.trades import register_trades_tool
 _LOGGER = logging.getLogger(__name__)
 
 
-def _register_echo(mcp: FastMCP[AppState]) -> None:
+def _register_echo(mcp: FastMCP) -> None:
     @mcp.tool(
         name="echo",
         description=(
@@ -46,40 +47,28 @@ def _register_echo(mcp: FastMCP[AppState]) -> None:
         return {"message": message, "version": __version__}
 
 
-def build_server(settings: Settings) -> FastMCP[AppState]:
-    """Build the FastMCP server with production lifespan."""
+def build_server(settings: Settings) -> FastMCP:
+    """Build the FastMCP server with dict-lifespan + mask_error_details."""
 
     @asynccontextmanager
     async def lifespan(
-        _server: FastMCP[AppState],
-    ) -> AsyncIterator[AppState]:
-        (
-            ticker_service,
-            ohlcv_service,
-            order_book_service,
-            trades_service,
-            subscriber,
-            cleanup,
-        ) = await build_production_service(settings)
+        _server: FastMCP,
+    ) -> AsyncIterator[dict[str, Any]]:
+        state, cleanup = await build_production_service(settings)
         _LOGGER.info(
             "cryptozavr-research started",
             extra={"mode": settings.mode.value, "version": __version__},
         )
         try:
-            yield AppState(
-                ticker_service=ticker_service,
-                ohlcv_service=ohlcv_service,
-                order_book_service=order_book_service,
-                trades_service=trades_service,
-                subscriber=subscriber,
-            )
+            yield state
         finally:
             await cleanup()
 
-    mcp: FastMCP[AppState] = FastMCP(
+    mcp = FastMCP(
         name="cryptozavr-research",
         version=__version__,
         lifespan=lifespan,
+        mask_error_details=True,
     )
     _register_echo(mcp)
     register_ticker_tool(mcp)
@@ -98,7 +87,7 @@ def main() -> None:
     )
     settings = Settings()  # type: ignore[call-arg]
     mcp = build_server(settings)
-    mcp.run()  # STDIO default
+    mcp.run()
 
 
 if __name__ == "__main__":
