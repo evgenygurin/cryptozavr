@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import pytest
 
+from cryptozavr.domain.assets import Asset, AssetCategory
 from cryptozavr.domain.market_data import (
     OHLCVCandle,
     OHLCVSeries,
@@ -19,13 +20,16 @@ from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.value_objects import Instant, PriceSize, Timeframe, TimeRange
 from cryptozavr.domain.venues import MarketType, VenueId
 from cryptozavr.mcp.dtos import (
+    CategoryDTO,
     OHLCVCandleDTO,
     OHLCVSeriesDTO,
     OrderBookDTO,
     PriceSizeDTO,
+    SymbolDTO,
     TickerDTO,
     TradesDTO,
     TradeTickDTO,
+    TrendingAssetDTO,
 )
 
 
@@ -353,3 +357,72 @@ class TestTradesDTO:
             reason_codes=[],
         )
         assert dto.trades == []
+
+
+class TestSymbolDTO:
+    def test_from_domain_basic_spot_symbol(self) -> None:
+        symbol = SymbolRegistry().get(
+            VenueId.KUCOIN,
+            "BTC",
+            "USDT",
+            market_type=MarketType.SPOT,
+            native_symbol="BTC-USDT",
+        )
+        dto = SymbolDTO.from_domain(symbol)
+        assert dto.venue == "kucoin"
+        assert dto.base == "BTC"
+        assert dto.quote == "USDT"
+        assert dto.native_symbol == "BTC-USDT"
+        assert dto.market_type == "spot"
+
+    def test_dto_serializes_to_json(self) -> None:
+        symbol = SymbolRegistry().get(
+            VenueId.KUCOIN,
+            "ETH",
+            "USDT",
+            market_type=MarketType.SPOT,
+            native_symbol="ETH-USDT",
+        )
+        dto = SymbolDTO.from_domain(symbol)
+        payload = dto.model_dump(mode="json")
+        assert payload["venue"] == "kucoin"
+        assert payload["native_symbol"] == "ETH-USDT"
+
+
+class TestTrendingAssetDTO:
+    def test_from_domain(self) -> None:
+        asset = Asset(
+            code="BTC",
+            name="Bitcoin",
+            coingecko_id="bitcoin",
+            market_cap_rank=1,
+            categories=(AssetCategory.LAYER_1,),
+        )
+        dto = TrendingAssetDTO.from_domain(asset, rank=0)
+        assert dto.code == "BTC"
+        assert dto.name == "Bitcoin"
+        assert dto.coingecko_id == "bitcoin"
+        assert dto.market_cap_rank == 1
+        assert dto.categories == ["layer_1"]
+        assert dto.rank == 0
+
+
+class TestCategoryDTO:
+    def test_from_dict_core_fields(self) -> None:
+        raw = {
+            "category_id": "layer-1",
+            "name": "Layer 1",
+            "market_cap": 1000000000,
+            "market_cap_change_24h": 1.5,
+        }
+        dto = CategoryDTO.from_provider(raw)
+        assert dto.id == "layer-1"
+        assert dto.name == "Layer 1"
+        assert dto.market_cap == Decimal("1000000000")
+        assert dto.market_cap_change_24h_pct == Decimal("1.5")
+
+    def test_missing_optional_fields_become_none(self) -> None:
+        raw = {"category_id": "meme", "name": "Meme"}
+        dto = CategoryDTO.from_provider(raw)
+        assert dto.market_cap is None
+        assert dto.market_cap_change_24h_pct is None

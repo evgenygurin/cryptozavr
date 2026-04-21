@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from cryptozavr.domain.assets import Asset
 from cryptozavr.domain.market_data import (
     OHLCVCandle,
     OHLCVSeries,
@@ -13,6 +15,7 @@ from cryptozavr.domain.market_data import (
     Ticker,
     TradeTick,
 )
+from cryptozavr.domain.symbols import Symbol
 from cryptozavr.domain.value_objects import PriceSize
 
 
@@ -209,4 +212,72 @@ class TradesDTO(BaseModel):
             symbol=symbol,
             trades=[TradeTickDTO.from_domain(t) for t in trades],
             reason_codes=list(reason_codes),
+        )
+
+
+class SymbolDTO(BaseModel):
+    """Wire-format market symbol."""
+
+    model_config = ConfigDict(frozen=True)
+
+    venue: str
+    base: str
+    quote: str
+    native_symbol: str
+    market_type: str
+
+    @classmethod
+    def from_domain(cls, symbol: Symbol) -> SymbolDTO:
+        return cls(
+            venue=symbol.venue.value,
+            base=symbol.base,
+            quote=symbol.quote,
+            native_symbol=symbol.native_symbol,
+            market_type=symbol.market_type.value,
+        )
+
+
+class TrendingAssetDTO(BaseModel):
+    """Wire-format trending crypto asset (from CoinGecko)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    code: str
+    name: str | None
+    coingecko_id: str | None
+    market_cap_rank: int | None
+    categories: list[str]
+    rank: int
+
+    @classmethod
+    def from_domain(cls, asset: Asset, rank: int) -> TrendingAssetDTO:
+        return cls(
+            code=asset.code,
+            name=asset.name,
+            coingecko_id=asset.coingecko_id,
+            market_cap_rank=asset.market_cap_rank,
+            categories=[c for c in asset.categories],
+            rank=rank,
+        )
+
+
+class CategoryDTO(BaseModel):
+    """Wire-format CoinGecko category."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    name: str
+    market_cap: Decimal | None = None
+    market_cap_change_24h_pct: Decimal | None = None
+
+    @classmethod
+    def from_provider(cls, raw: dict[str, Any]) -> CategoryDTO:
+        mc = raw.get("market_cap")
+        mc_change = raw.get("market_cap_change_24h")
+        return cls(
+            id=str(raw["category_id"]),
+            name=str(raw["name"]),
+            market_cap=Decimal(str(mc)) if mc is not None else None,
+            market_cap_change_24h_pct=(Decimal(str(mc_change)) if mc_change is not None else None),
         )
