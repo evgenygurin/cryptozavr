@@ -5,11 +5,14 @@ import json
 from fastmcp import FastMCP
 from fastmcp.dependencies import Depends
 
+from cryptozavr.application.services.discovery_service import DiscoveryService
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.venues import VenueId
-from cryptozavr.mcp.lifespan_state import get_registry
+from cryptozavr.mcp.dtos import CategoryDTO, TrendingAssetDTO
+from cryptozavr.mcp.lifespan_state import get_discovery_service, get_registry
 
 _REGISTRY: SymbolRegistry = Depends(get_registry)
+_DISCOVERY: DiscoveryService = Depends(get_discovery_service)
 
 
 def register_resources(mcp: FastMCP) -> None:
@@ -57,5 +60,54 @@ def register_resources(mcp: FastMCP) -> None:
                     }
                     for s in symbols
                 ],
+            },
+        )
+
+    @mcp.resource(
+        "cryptozavr://trending",
+        name="Trending Assets",
+        description=(
+            "Currently trending crypto assets (CoinGecko). Ordered by trending rank (0-indexed)."
+        ),
+        mime_type="application/json",
+        tags={"catalog", "discovery"},
+        annotations={"readOnlyHint": True, "idempotentHint": False},
+    )
+    async def trending_resource(
+        discovery: DiscoveryService = _DISCOVERY,
+    ) -> str:
+        try:
+            assets = await discovery.list_trending()
+        except Exception as exc:
+            return json.dumps({"assets": [], "error": str(exc)})
+        return json.dumps(
+            {
+                "assets": [
+                    TrendingAssetDTO.from_domain(a, rank=i).model_dump(
+                        mode="json",
+                    )
+                    for i, a in enumerate(assets)
+                ],
+            },
+        )
+
+    @mcp.resource(
+        "cryptozavr://categories",
+        name="Market Categories",
+        description=("CoinGecko asset categories with market cap + 24h change."),
+        mime_type="application/json",
+        tags={"catalog", "discovery"},
+        annotations={"readOnlyHint": True, "idempotentHint": True},
+    )
+    async def categories_resource(
+        discovery: DiscoveryService = _DISCOVERY,
+    ) -> str:
+        try:
+            raw = await discovery.list_categories()
+        except Exception as exc:
+            return json.dumps({"categories": [], "error": str(exc)})
+        return json.dumps(
+            {
+                "categories": [CategoryDTO.from_provider(c).model_dump(mode="json") for c in raw],
             },
         )
