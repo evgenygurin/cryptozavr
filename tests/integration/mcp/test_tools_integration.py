@@ -59,22 +59,29 @@ async def test_get_ticker_full_stack_against_live_supabase(
 ) -> None:
     mcp = build_server(settings)
     async with Client(mcp) as client:
-        # First call — should miss cache and hit the provider.
+        # Force refresh — deterministic provider reach regardless of cache state
+        # left over from prior runs (Supabase persists across test sessions).
         first = await client.call_tool(
             "get_ticker",
-            {"venue": "kucoin", "symbol": "BTC-USDT"},
+            {
+                "venue": "kucoin",
+                "symbol": "BTC-USDT",
+                "force_refresh": True,
+            },
         )
         assert first.structured_content["venue"] == "kucoin"
         assert first.structured_content["symbol"] == "BTC-USDT"
         assert "provider:called" in first.structured_content["reason_codes"]
+        assert "cache:bypassed" in first.structured_content["reason_codes"]
 
-        # Second call within TTL — may or may not hit cache depending on
-        # in-memory decorator TTL; we only assert it returns a ticker.
+        # Second call without force_refresh — should now hit the Supabase
+        # cache because the first call just populated it.
         second = await client.call_tool(
             "get_ticker",
             {"venue": "kucoin", "symbol": "BTC-USDT"},
         )
         assert second.structured_content["symbol"] == "BTC-USDT"
+        assert "cache:hit" in second.structured_content["reason_codes"]
 
 
 async def test_get_ohlcv_full_stack_against_live_supabase(

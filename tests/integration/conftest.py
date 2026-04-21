@@ -13,10 +13,17 @@ from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.infrastructure.supabase.gateway import SupabaseGateway
 from cryptozavr.infrastructure.supabase.pg_pool import PgPoolConfig, create_pool
 
-LOCAL_DB_URL = os.environ.get(
-    "SUPABASE_DB_URL",
-    "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
-)
+_LOCAL_DB_URL_DEFAULT = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+
+
+def _db_url() -> str:
+    """Resolve the Supabase DB URL at fixture-time, not import-time.
+
+    Integration tests run with env injected after the test process starts,
+    so reading os.environ here picks up SUPABASE_DB_URL when it's set and
+    falls back to the local Supabase default otherwise.
+    """
+    return os.environ.get("SUPABASE_DB_URL", _LOCAL_DB_URL_DEFAULT)
 
 
 async def _is_supabase_reachable(dsn: str) -> bool:
@@ -28,14 +35,24 @@ async def _is_supabase_reachable(dsn: str) -> bool:
         return False
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def supabase_pool() -> AsyncIterator[asyncpg.Pool]:
-    """Session-scoped pool against local Supabase; skip if unreachable."""
-    if not await _is_supabase_reachable(LOCAL_DB_URL):
-        pytest.skip("Supabase not reachable at " + LOCAL_DB_URL + " — run `supabase start` first.")
-    pool = await create_pool(PgPoolConfig(dsn=LOCAL_DB_URL, min_size=1, max_size=5))
-    yield pool
-    await pool.close()
+    """Function-scoped pool; skip if unreachable.
+
+    Function scope avoids the "attached to a different loop" error that
+    pytest-asyncio raises when a session-scoped async fixture tries to
+    outlive a function-scoped event loop.
+    """
+    dsn = _db_url()
+    if not await _is_supabase_reachable(dsn):
+        pytest.skip(
+            f"Supabase not reachable at {dsn} — set SUPABASE_DB_URL or run `supabase start`."
+        )
+    pool = await create_pool(PgPoolConfig(dsn=dsn, min_size=1, max_size=5))
+    try:
+        yield pool
+    finally:
+        await pool.close()
 
 
 @pytest_asyncio.fixture
