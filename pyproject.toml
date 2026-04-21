@@ -122,6 +122,10 @@ ignore_missing_imports = true
 module = "ccxt.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "supabase.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]

@@ -11,6 +11,8 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
+from supabase import AsyncClient, acreate_client
+
 from cryptozavr.application.services.ohlcv_service import OhlcvService
 from cryptozavr.application.services.order_book_service import OrderBookService
 from cryptozavr.application.services.ticker_service import TickerService
@@ -28,6 +30,7 @@ from cryptozavr.infrastructure.supabase.pg_pool import (
     PgPoolConfig,
     create_pool,
 )
+from cryptozavr.infrastructure.supabase.realtime import RealtimeSubscriber
 from cryptozavr.mcp.settings import Settings
 
 _LOG = logging.getLogger(__name__)
@@ -41,6 +44,7 @@ class AppState:
     ohlcv_service: OhlcvService
     order_book_service: OrderBookService
     trades_service: TradesService
+    subscriber: RealtimeSubscriber
 
 
 async def build_production_service(
@@ -50,6 +54,7 @@ async def build_production_service(
     OhlcvService,
     OrderBookService,
     TradesService,
+    RealtimeSubscriber,
     Callable[[], Awaitable[None]],
 ]:
     """Build production TickerService + OhlcvService and a cleanup coroutine."""
@@ -122,8 +127,18 @@ async def build_production_service(
         gateway=gateway,
     )
 
+    supabase_client: AsyncClient = await acreate_client(
+        settings.supabase_url,
+        settings.supabase_service_role_key,
+    )
+    subscriber = RealtimeSubscriber(client=supabase_client)
+
     async def cleanup() -> None:
         _LOG.info("cryptozavr shutting down")
+        try:
+            await subscriber.close()
+        except Exception as exc:
+            _LOG.warning("realtime subscriber close failed: %s", exc)
         try:
             await http_registry.close_all()
         except Exception as exc:
@@ -142,5 +157,6 @@ async def build_production_service(
         ohlcv_service,
         order_book_service,
         trades_service,
+        subscriber,
         cleanup,
     )

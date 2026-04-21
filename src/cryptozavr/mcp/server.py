@@ -58,6 +58,7 @@ def build_server(settings: Settings) -> FastMCP[AppState]:
             ohlcv_service,
             order_book_service,
             trades_service,
+            subscriber,
             cleanup,
         ) = await build_production_service(settings)
         _LOGGER.info(
@@ -70,6 +71,7 @@ def build_server(settings: Settings) -> FastMCP[AppState]:
                 ohlcv_service=ohlcv_service,
                 order_book_service=order_book_service,
                 trades_service=trades_service,
+                subscriber=subscriber,
             )
         finally:
             await cleanup()
