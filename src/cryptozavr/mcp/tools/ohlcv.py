@@ -1,10 +1,11 @@
-"""get_ohlcv MCP tool registration."""
+"""get_ohlcv MCP tool registration (v3 idiomatic: Depends + ctx.info)."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, cast
+from typing import Annotated
 
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import Depends
 from pydantic import Field
 
 from cryptozavr.application.services.ohlcv_service import OhlcvService
@@ -12,6 +13,10 @@ from cryptozavr.domain.exceptions import DomainError, ValidationError
 from cryptozavr.domain.value_objects import Timeframe
 from cryptozavr.mcp.dtos import OHLCVSeriesDTO
 from cryptozavr.mcp.errors import domain_to_tool_error
+from cryptozavr.mcp.lifespan_state import get_ohlcv_service
+
+# Module-level singleton — avoids B008 (function call in default argument).
+_OHLCV_SVC: OhlcvService = Depends(get_ohlcv_service)
 
 
 def register_ohlcv_tool(mcp: FastMCP) -> None:
@@ -59,6 +64,7 @@ def register_ohlcv_tool(mcp: FastMCP) -> None:
             bool,
             Field(description="Bypass the Supabase cache."),
         ] = False,
+        service: OhlcvService = _OHLCV_SVC,
     ) -> OHLCVSeriesDTO:
         try:
             tf = Timeframe(timeframe)
@@ -66,9 +72,10 @@ def register_ohlcv_tool(mcp: FastMCP) -> None:
             raise domain_to_tool_error(
                 ValidationError(f"unknown timeframe: {timeframe!r}"),
             ) from exc
-        service = cast(
-            OhlcvService,
-            cast(Any, ctx.lifespan_context).ohlcv_service,
+
+        await ctx.info(
+            f"get_ohlcv venue={venue} symbol={symbol} timeframe={timeframe} "
+            f"limit={limit} force_refresh={force_refresh}",
         )
         try:
             result = await service.fetch_ohlcv(
@@ -80,4 +87,15 @@ def register_ohlcv_tool(mcp: FastMCP) -> None:
             )
         except DomainError as exc:
             raise domain_to_tool_error(exc) from exc
+
+        await ctx.info(f"reason_codes: {','.join(result.reason_codes)}")
+        if "cache:write_failed" in result.reason_codes:
+            await ctx.warning(
+                "Supabase write-through failed; data valid but not persisted.",
+            )
+        staleness = result.series.quality.staleness.name.lower()
+        if staleness != "fresh":
+            await ctx.warning(
+                f"staleness={staleness} — consider force_refresh=True.",
+            )
         return OHLCVSeriesDTO.from_domain(result.series, result.reason_codes)

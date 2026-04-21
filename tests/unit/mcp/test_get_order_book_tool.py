@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -13,6 +12,7 @@ from fastmcp.exceptions import ToolError
 
 from cryptozavr.application.services.order_book_service import (
     OrderBookFetchResult,
+    OrderBookService,
 )
 from cryptozavr.domain.exceptions import SymbolNotFoundError
 from cryptozavr.domain.market_data import OrderBookSnapshot
@@ -25,12 +25,8 @@ from cryptozavr.domain.quality import (
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.value_objects import Instant, PriceSize
 from cryptozavr.domain.venues import MarketType, VenueId
+from cryptozavr.mcp.lifespan_state import LIFESPAN_KEYS
 from cryptozavr.mcp.tools.order_book import register_order_book_tool
-
-
-@dataclass(slots=True)
-class _AppState:
-    order_book_service: object
 
 
 def _make_snapshot() -> OrderBookSnapshot:
@@ -62,7 +58,7 @@ def _make_snapshot() -> OrderBookSnapshot:
 def _build_server(mock_service) -> FastMCP:
     @asynccontextmanager
     async def lifespan(server):
-        yield _AppState(order_book_service=mock_service)
+        yield {LIFESPAN_KEYS.order_book_service: mock_service}
 
     mcp = FastMCP(name="test", version="0.0.0", lifespan=lifespan)
     register_order_book_tool(mcp)
@@ -71,7 +67,9 @@ def _build_server(mock_service) -> FastMCP:
 
 @pytest.mark.asyncio
 async def test_get_order_book_returns_dto_fields() -> None:
-    service = MagicMock()
+    # Use spec= so MagicMock is not treated as AbstractAsyncContextManager
+    # by FastMCP's Depends() resolution engine.
+    service = MagicMock(spec=OrderBookService)
     service.fetch_order_book = AsyncMock(
         return_value=OrderBookFetchResult(
             snapshot=_make_snapshot(),
@@ -97,7 +95,7 @@ async def test_get_order_book_returns_dto_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_get_order_book_forwards_force_refresh() -> None:
-    service = MagicMock()
+    service = MagicMock(spec=OrderBookService)
     service.fetch_order_book = AsyncMock(
         return_value=OrderBookFetchResult(
             snapshot=_make_snapshot(),
@@ -122,7 +120,7 @@ async def test_get_order_book_forwards_force_refresh() -> None:
 
 @pytest.mark.asyncio
 async def test_get_order_book_symbol_not_found_surfaces_tool_error() -> None:
-    service = MagicMock()
+    service = MagicMock(spec=OrderBookService)
     service.fetch_order_book = AsyncMock(
         side_effect=SymbolNotFoundError(
             user_input="DOGE-USDT",

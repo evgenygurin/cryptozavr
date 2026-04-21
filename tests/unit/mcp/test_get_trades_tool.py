@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -11,18 +10,14 @@ import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
 
-from cryptozavr.application.services.trades_service import TradesFetchResult
+from cryptozavr.application.services.trades_service import TradesFetchResult, TradesService
 from cryptozavr.domain.exceptions import SymbolNotFoundError
 from cryptozavr.domain.market_data import TradeSide, TradeTick
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.value_objects import Instant
 from cryptozavr.domain.venues import MarketType, VenueId
+from cryptozavr.mcp.lifespan_state import LIFESPAN_KEYS
 from cryptozavr.mcp.tools.trades import register_trades_tool
-
-
-@dataclass(slots=True)
-class _AppState:
-    trades_service: object
 
 
 def _make_trades() -> tuple[TradeTick, ...]:
@@ -48,7 +43,7 @@ def _make_trades() -> tuple[TradeTick, ...]:
 def _build_server(mock_service) -> FastMCP:
     @asynccontextmanager
     async def lifespan(server):
-        yield _AppState(trades_service=mock_service)
+        yield {LIFESPAN_KEYS.trades_service: mock_service}
 
     mcp = FastMCP(name="test", version="0.0.0", lifespan=lifespan)
     register_trades_tool(mcp)
@@ -57,7 +52,9 @@ def _build_server(mock_service) -> FastMCP:
 
 @pytest.mark.asyncio
 async def test_get_trades_returns_dto_fields() -> None:
-    service = MagicMock()
+    # Use spec= so MagicMock is not treated as AbstractAsyncContextManager
+    # by FastMCP's Depends() resolution engine.
+    service = MagicMock(spec=TradesService)
     service.fetch_trades = AsyncMock(
         return_value=TradesFetchResult(
             venue="kucoin",
@@ -88,7 +85,7 @@ async def test_get_trades_returns_dto_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_get_trades_forwards_force_refresh() -> None:
-    service = MagicMock()
+    service = MagicMock(spec=TradesService)
     service.fetch_trades = AsyncMock(
         return_value=TradesFetchResult(
             venue="kucoin",
@@ -115,7 +112,7 @@ async def test_get_trades_forwards_force_refresh() -> None:
 
 @pytest.mark.asyncio
 async def test_get_trades_symbol_not_found_surfaces_tool_error() -> None:
-    service = MagicMock()
+    service = MagicMock(spec=TradesService)
     service.fetch_trades = AsyncMock(
         side_effect=SymbolNotFoundError(
             user_input="DOGE-USDT",

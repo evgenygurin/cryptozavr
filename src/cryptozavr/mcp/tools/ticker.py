@@ -1,16 +1,21 @@
-"""get_ticker MCP tool registration."""
+"""get_ticker MCP tool registration (v3 idiomatic: Depends + ctx.info)."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, cast
+from typing import Annotated
 
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import Depends
 from pydantic import Field
 
 from cryptozavr.application.services.ticker_service import TickerService
 from cryptozavr.domain.exceptions import DomainError
 from cryptozavr.mcp.dtos import TickerDTO
 from cryptozavr.mcp.errors import domain_to_tool_error
+from cryptozavr.mcp.lifespan_state import get_ticker_service
+
+# Module-level singleton — avoids B008 (function call in default argument).
+_TICKER_SVC: TickerService = Depends(get_ticker_service)
 
 
 def register_ticker_tool(mcp: FastMCP) -> None:
@@ -45,10 +50,11 @@ def register_ticker_tool(mcp: FastMCP) -> None:
             bool,
             Field(description="Bypass the Supabase cache."),
         ] = False,
+        service: TickerService = _TICKER_SVC,
     ) -> TickerDTO:
-        # ctx.lifespan_context is typed as dict[str, Any] in FastMCP stubs,
-        # but at runtime it holds whatever the lifespan yielded (here: AppState).
-        service = cast(TickerService, cast(Any, ctx.lifespan_context).ticker_service)
+        await ctx.info(
+            f"get_ticker venue={venue} symbol={symbol} force_refresh={force_refresh}",
+        )
         try:
             result = await service.fetch_ticker(
                 venue=venue,
@@ -57,4 +63,15 @@ def register_ticker_tool(mcp: FastMCP) -> None:
             )
         except DomainError as exc:
             raise domain_to_tool_error(exc) from exc
+
+        await ctx.info(f"reason_codes: {','.join(result.reason_codes)}")
+        if "cache:write_failed" in result.reason_codes:
+            await ctx.warning(
+                "Supabase write-through failed; data valid but not persisted.",
+            )
+        staleness = result.ticker.quality.staleness.name.lower()
+        if staleness != "fresh":
+            await ctx.warning(
+                f"staleness={staleness} — consider force_refresh=True.",
+            )
         return TickerDTO.from_domain(result.ticker, result.reason_codes)

@@ -1,16 +1,21 @@
-"""get_trades MCP tool registration."""
+"""get_trades MCP tool registration (v3 idiomatic: Depends + ctx.info)."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, cast
+from typing import Annotated
 
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import Depends
 from pydantic import Field
 
 from cryptozavr.application.services.trades_service import TradesService
 from cryptozavr.domain.exceptions import DomainError
 from cryptozavr.mcp.dtos import TradesDTO
 from cryptozavr.mcp.errors import domain_to_tool_error
+from cryptozavr.mcp.lifespan_state import get_trades_service
+
+# Module-level singleton — avoids B008 (function call in default argument).
+_TRADES_SVC: TradesService = Depends(get_trades_service)
 
 
 def register_trades_tool(mcp: FastMCP) -> None:
@@ -48,10 +53,10 @@ def register_trades_tool(mcp: FastMCP) -> None:
             bool,
             Field(description="Passes through to the chain; non-cached path."),
         ] = False,
+        service: TradesService = _TRADES_SVC,
     ) -> TradesDTO:
-        service = cast(
-            TradesService,
-            cast(Any, ctx.lifespan_context).trades_service,
+        await ctx.info(
+            f"get_trades venue={venue} symbol={symbol} limit={limit} force_refresh={force_refresh}",
         )
         try:
             result = await service.fetch_trades(
@@ -62,6 +67,13 @@ def register_trades_tool(mcp: FastMCP) -> None:
             )
         except DomainError as exc:
             raise domain_to_tool_error(exc) from exc
+
+        await ctx.info(f"reason_codes: {','.join(result.reason_codes)}")
+        if "cache:write_failed" in result.reason_codes:
+            await ctx.warning(
+                "Supabase write-through failed; data valid but not persisted.",
+            )
+        # Trades have no series-level quality envelope — staleness check skipped.
         return TradesDTO.from_domain(
             venue=result.venue,
             symbol=result.symbol,

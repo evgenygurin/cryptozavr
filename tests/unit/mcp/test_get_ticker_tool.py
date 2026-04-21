@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -13,6 +12,7 @@ from fastmcp.exceptions import ToolError
 
 from cryptozavr.application.services.ticker_service import (
     TickerFetchResult,
+    TickerService,
 )
 from cryptozavr.domain.exceptions import SymbolNotFoundError
 from cryptozavr.domain.market_data import Ticker
@@ -25,12 +25,8 @@ from cryptozavr.domain.quality import (
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.value_objects import Instant
 from cryptozavr.domain.venues import MarketType, VenueId
+from cryptozavr.mcp.lifespan_state import LIFESPAN_KEYS
 from cryptozavr.mcp.tools.ticker import register_ticker_tool
-
-
-@dataclass(slots=True)
-class _AppState:
-    ticker_service: object
 
 
 def _make_ticker() -> Ticker:
@@ -58,7 +54,7 @@ def _make_ticker() -> Ticker:
 def _build_server(mock_service) -> FastMCP:
     @asynccontextmanager
     async def lifespan(server):
-        yield _AppState(ticker_service=mock_service)
+        yield {LIFESPAN_KEYS.ticker_service: mock_service}
 
     mcp = FastMCP(name="test", version="0.0.0", lifespan=lifespan)
     register_ticker_tool(mcp)
@@ -67,7 +63,9 @@ def _build_server(mock_service) -> FastMCP:
 
 @pytest.mark.asyncio
 async def test_get_ticker_returns_dto_fields() -> None:
-    service = MagicMock()
+    # Use spec= so MagicMock is not treated as AbstractAsyncContextManager
+    # by FastMCP's Depends() resolution engine.
+    service = MagicMock(spec=TickerService)
     service.fetch_ticker = AsyncMock(
         return_value=TickerFetchResult(
             ticker=_make_ticker(),
@@ -101,7 +99,7 @@ async def test_get_ticker_returns_dto_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_get_ticker_forwards_force_refresh() -> None:
-    service = MagicMock()
+    service = MagicMock(spec=TickerService)
     service.fetch_ticker = AsyncMock(
         return_value=TickerFetchResult(
             ticker=_make_ticker(),
@@ -123,7 +121,7 @@ async def test_get_ticker_forwards_force_refresh() -> None:
 
 @pytest.mark.asyncio
 async def test_symbol_not_found_surfaces_as_tool_error() -> None:
-    service = MagicMock()
+    service = MagicMock(spec=TickerService)
     service.fetch_ticker = AsyncMock(
         side_effect=SymbolNotFoundError(user_input="DOGE-USDT", venue="kucoin"),
     )
