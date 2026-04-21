@@ -100,3 +100,11 @@ class SymbolRegistry:
         key = (venue, base, quote, market_type)
         with self._lock:
             return self._store.get(key)
+
+    def all_for_venue(self, venue: VenueId) -> list[Symbol]:
+        """Return all symbols registered for a venue, sorted by native_symbol."""
+        with self._lock:
+            return sorted(
+                (s for s in self._store.values() if s.venue == venue),
+                key=lambda s: s.native_symbol,
+            )
