@@ -2,10 +2,10 @@
 description: Multi-tool research collage — ticker + OHLCV (1h, 24 candles) + order book + recent trades for a symbol.
 argument-hint: <venue> <symbol>
 allowed-tools:
-  - "mcp__cryptozavr-research__get_ticker"
-  - "mcp__cryptozavr-research__get_ohlcv"
-  - "mcp__cryptozavr-research__get_order_book"
-  - "mcp__cryptozavr-research__get_trades"
+  - "mcp__plugin_cryptozavr_cryptozavr-research__get_ticker"
+  - "mcp__plugin_cryptozavr_cryptozavr-research__get_ohlcv"
+  - "mcp__plugin_cryptozavr_cryptozavr-research__get_order_book"
+  - "mcp__plugin_cryptozavr_cryptozavr-research__get_trades"
 ---
 
 Build a research snapshot for the user's symbol.

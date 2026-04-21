@@ -1,7 +1,7 @@
 ---
 description: Fetch OHLCV candles (open/high/low/close/volume) for a symbol + timeframe.
 argument-hint: <venue> <symbol> <timeframe> [limit]
-allowed-tools: ["mcp__cryptozavr-research__get_ohlcv"]
+allowed-tools: ["mcp__plugin_cryptozavr_cryptozavr-research__get_ohlcv"]
 ---
 
 Fetch OHLCV candles for the user's requested symbol.

@@ -1,7 +1,7 @@
 ---
 description: Smoke-test the plugin — call the echo tool and confirm the MCP server is reachable.
 argument-hint: ""
-allowed-tools: ["mcp__cryptozavr-research__echo"]
+allowed-tools: ["mcp__plugin_cryptozavr_cryptozavr-research__echo"]
 ---
 
 Call the `echo` MCP tool with message `"health-check"`. If it returns the echoed message + server version, report:

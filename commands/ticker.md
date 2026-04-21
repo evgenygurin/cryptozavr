@@ -1,7 +1,7 @@
 ---
 description: Fetch latest ticker (last/bid/ask/volume/24h-change) for a symbol on a venue.
 argument-hint: <venue> <symbol>
-allowed-tools: ["mcp__cryptozavr-research__get_ticker"]
+allowed-tools: ["mcp__plugin_cryptozavr_cryptozavr-research__get_ticker"]
 ---
 
 Fetch the ticker for the user's requested symbol.
