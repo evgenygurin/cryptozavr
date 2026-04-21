@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-04-22
+
+### Added — M2.8 Production-ready multi-platform plugin
+
+**Plugin manifest**
+- `.claude-plugin/plugin.json` (name, version, author, keywords, MIT).
+- `.claude-plugin/marketplace.json` — self-hosted marketplace registry with `source: "./"` (mirrors dj-music-plugin / exa-mcp-server convention). Users install via `/plugin marketplace add https://github.com/evgenygurin/cryptozavr`.
+
+**Slash commands (4)**
+- `/cryptozavr:ticker <venue> <symbol>` — wraps get_ticker
+- `/cryptozavr:ohlcv <venue> <symbol> <timeframe> [limit]` — OHLCV candles
+- `/cryptozavr:research <venue> <symbol>` — 4-tool parallel research collage (Price → Trend → Liquidity → Flow → Provenance)
+- `/cryptozavr:health` — echo smoke test
+
+**Agent (1)**
+- `crypto-researcher` — subagent (model=sonnet, color=cyan). Strict "data, not advice" rails. Tool list restricted to the 4 cryptozavr MCP tools. Structured Price → Trend → Liquidity → Flow → Provenance report format.
+
+**Skills (2)**
+- `crypto-research` — when-to-invoke guide + tool-selection matrix + research rails.
+- `interpreting-market-data` — field-by-field legend covering ticker/OHLCV/order_book/trades + 5-handler reason_codes taxonomy + red flags.
+
+**Hooks**
+- `SessionStart` hook prints a plugin loaded banner on startup only (not on clear/compact). Uses `${CLAUDE_PLUGIN_ROOT}` for path portability.
+
+**Cross-platform**
+- `.codex/README.md`, `.opencode/README.md`, `.cursor-plugin/README.md` — per-platform install + feature-parity notes.
+- `gemini-extension.json` — Gemini CLI manifest (same MCP server).
+- `docs/README.claude-code.md` / `docs/README.codex.md` / `docs/README.opencode.md` — install guides.
+
+**Docs**
+- `README.md` rewritten for plugin users (not just developers).
+- `.env.example` with inline comments on allowed values.
+- `docs/superpowers/m2.8-smoke-test.md` — plugin-validator findings + install verification steps.
+
+### Fixed
+- Removed M1-legacy root `plugin.json` (duplicated `.claude-plugin/plugin.json` with stale version 0.0.1).
+- `tests/unit/mcp/test_settings.py::test_settings_missing_required_field` now passes `_env_file=None` so the local `.env` (populated for cloud Supabase) doesn't mask the "missing var → ValidationError" assertion.
+
+### Next
+- M3: L4 business logic — signals (crossover, divergence, RSI), triggers, alerts. Elicit-based approval flows for trading ops (later phase).
+
 ## [0.0.10] - 2026-04-21
 
 ### Added — M2.7 Realtime subscriber + cloud Supabase
