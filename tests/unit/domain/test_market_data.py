@@ -6,10 +6,16 @@ from decimal import Decimal
 
 import pytest
 
-from cryptozavr.domain.market_data import OHLCVCandle, OHLCVSeries, Ticker, TradeSide
+from cryptozavr.domain.market_data import (
+    OHLCVCandle,
+    OHLCVSeries,
+    OrderBookSnapshot,
+    Ticker,
+    TradeSide,
+)
 from cryptozavr.domain.quality import Confidence, DataQuality, Provenance, Staleness
 from cryptozavr.domain.symbols import Symbol, SymbolRegistry
-from cryptozavr.domain.value_objects import Instant, Percentage, Timeframe, TimeRange
+from cryptozavr.domain.value_objects import Instant, Percentage, PriceSize, Timeframe, TimeRange
 from cryptozavr.domain.venues import MarketType, VenueId
 
 
@@ -169,3 +175,50 @@ class TestOHLCVSeries:
         )
         with pytest.raises(IndexError):
             series.last()
+
+
+class TestOrderBookSnapshot:
+    def test_happy_path(self, btc_usdt: Symbol, fresh_quality: DataQuality) -> None:
+        bids = (
+            PriceSize(price=Decimal("64999"), size=Decimal("1.0")),
+            PriceSize(price=Decimal("64998"), size=Decimal("2.0")),
+        )
+        asks = (
+            PriceSize(price=Decimal("65001"), size=Decimal("0.5")),
+            PriceSize(price=Decimal("65002"), size=Decimal("1.5")),
+        )
+        ob = OrderBookSnapshot(
+            symbol=btc_usdt,
+            bids=bids,
+            asks=asks,
+            observed_at=Instant.now(),
+            quality=fresh_quality,
+        )
+        assert ob.best_bid() == bids[0]
+        assert ob.best_ask() == asks[0]
+
+    def test_spread_and_spread_bps(self, btc_usdt: Symbol, fresh_quality: DataQuality) -> None:
+        bids = (PriceSize(price=Decimal("99900"), size=Decimal("1")),)
+        asks = (PriceSize(price=Decimal("100100"), size=Decimal("1")),)
+        ob = OrderBookSnapshot(
+            symbol=btc_usdt,
+            bids=bids,
+            asks=asks,
+            observed_at=Instant.now(),
+            quality=fresh_quality,
+        )
+        assert ob.spread() == Decimal("200")
+        assert ob.spread_bps() == Decimal("20")
+
+    def test_empty_bids_or_asks(self, btc_usdt: Symbol, fresh_quality: DataQuality) -> None:
+        ob = OrderBookSnapshot(
+            symbol=btc_usdt,
+            bids=(),
+            asks=(PriceSize(price=Decimal("1"), size=Decimal("1")),),
+            observed_at=Instant.now(),
+            quality=fresh_quality,
+        )
+        assert ob.best_bid() is None
+        assert ob.best_ask() is not None
+        assert ob.spread() is None
+        assert ob.spread_bps() is None

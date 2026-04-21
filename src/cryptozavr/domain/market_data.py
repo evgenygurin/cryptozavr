@@ -8,7 +8,13 @@ from enum import StrEnum
 
 from cryptozavr.domain.quality import DataQuality
 from cryptozavr.domain.symbols import Symbol
-from cryptozavr.domain.value_objects import Instant, Percentage, Timeframe, TimeRange
+from cryptozavr.domain.value_objects import (
+    Instant,
+    Percentage,
+    PriceSize,
+    Timeframe,
+    TimeRange,
+)
 
 
 class TradeSide(StrEnum):
@@ -89,3 +95,37 @@ class OHLCVSeries:
             range=tr,
             quality=self.quality,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class OrderBookSnapshot:
+    """Single-moment order book: bids desc by price, asks asc by price."""
+
+    symbol: Symbol
+    bids: tuple[PriceSize, ...]
+    asks: tuple[PriceSize, ...]
+    observed_at: Instant
+    quality: DataQuality
+
+    def best_bid(self) -> PriceSize | None:
+        return self.bids[0] if self.bids else None
+
+    def best_ask(self) -> PriceSize | None:
+        return self.asks[0] if self.asks else None
+
+    def spread(self) -> Decimal | None:
+        bid = self.best_bid()
+        ask = self.best_ask()
+        if bid is None or ask is None:
+            return None
+        return ask.price - bid.price
+
+    def spread_bps(self) -> Decimal | None:
+        bid = self.best_bid()
+        ask = self.best_ask()
+        if bid is None or ask is None:
+            return None
+        mid = (ask.price + bid.price) / Decimal(2)
+        if mid == 0:
+            return None
+        return (ask.price - bid.price) / mid * Decimal(10_000)
