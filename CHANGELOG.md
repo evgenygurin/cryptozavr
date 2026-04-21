@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-04-21
+
+### Added — M2.6 `get_order_book` + `get_trades` tools
+- `PriceSizeDTO` (bid/ask level), `OrderBookDTO` (bids/asks arrays + spread/spread_bps), `TradeTickDTO` (single trade), `TradesDTO` (wrapped list + venue/symbol). All Pydantic v2 frozen BaseModels with `from_domain` factories.
+- `OrderBookService` (L4) — non-cached fetch via `build_order_book_chain`. `fetch_order_book(venue, symbol, depth, force_refresh)` returns `OrderBookFetchResult(snapshot, reason_codes)`.
+- `TradesService` (L4) — non-cached fetch via `build_trades_chain`. `fetch_trades(venue, symbol, limit, since, force_refresh)` returns `TradesFetchResult(venue, symbol, trades, reason_codes)`.
+- `build_order_book_chain` / `build_trades_chain` assembly helpers (delegate to `_build_chain`).
+- `register_order_book_tool(mcp)`: `get_order_book(venue, symbol, depth, force_refresh)` bounded `depth` 1..200. `annotations.idempotentHint=False` (book ticks).
+- `register_trades_tool(mcp)`: `get_trades(venue, symbol, limit, force_refresh)` bounded `limit` 1..1000. `annotations.idempotentHint=False`.
+- `AppState` now carries all four services (ticker, ohlcv, order_book, trades). `build_production_service` returns a 5-tuple.
+- ~16 new unit tests (DTOs 7 + OrderBookService 5 + TradesService 5 + each tool 3). Total 283 unit + 5 contract + 2 integration (skip-safe).
+
+### Next
+- M2.7+: Realtime subscriber (phase 1.5), signals/triggers (L4 business logic), production deployment to cloud Supabase.
+
 ## [0.0.8] - 2026-04-21
 
 ### Added — M2.5 `get_ohlcv` tool + integration tests
