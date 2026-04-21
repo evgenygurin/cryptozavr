@@ -83,7 +83,7 @@ class Instant:
         return self._dt
 
     def to_ms(self) -> int:
-        return int(self._dt.timestamp() * 1000)
+        return round(self._dt.timestamp() * 1000)
 
     def isoformat(self) -> str:
         return self._dt.isoformat()
