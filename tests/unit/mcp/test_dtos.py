@@ -6,6 +6,8 @@ from decimal import Decimal
 
 import pytest
 
+from cryptozavr.application.services.market_analyzer import AnalysisReport
+from cryptozavr.application.strategies.base import AnalysisResult
 from cryptozavr.domain.assets import Asset, AssetCategory
 from cryptozavr.domain.market_data import (
     OHLCVCandle,
@@ -20,6 +22,8 @@ from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.value_objects import Instant, PriceSize, Timeframe, TimeRange
 from cryptozavr.domain.venues import MarketType, VenueId
 from cryptozavr.mcp.dtos import (
+    AnalysisReportDTO,
+    AnalysisResultDTO,
     CategoryDTO,
     OHLCVCandleDTO,
     OHLCVSeriesDTO,
@@ -426,3 +430,78 @@ class TestCategoryDTO:
         dto = CategoryDTO.from_provider(raw)
         assert dto.market_cap is None
         assert dto.market_cap_change_24h_pct is None
+
+
+class TestAnalysisResultDTO:
+    def test_from_domain_copies_core_fields(self) -> None:
+        result = AnalysisResult(
+            strategy="vwap",
+            findings={"vwap": Decimal("100.5"), "bars_used": 10},
+            confidence=Confidence.HIGH,
+        )
+        dto = AnalysisResultDTO.from_domain(result, reason_codes=["cache:hit"])
+        assert dto.strategy == "vwap"
+        assert dto.confidence == "high"
+        assert dto.findings == {"vwap": Decimal("100.5"), "bars_used": 10}
+        assert dto.reason_codes == ["cache:hit"]
+
+    def test_tuple_findings_become_lists_in_json(self) -> None:
+        result = AnalysisResult(
+            strategy="support_resistance",
+            findings={
+                "supports": (Decimal("90"), Decimal("85")),
+                "resistances": (Decimal("110"),),
+            },
+            confidence=Confidence.MEDIUM,
+        )
+        dto = AnalysisResultDTO.from_domain(result, reason_codes=[])
+        payload = dto.model_dump(mode="json")
+        assert payload["findings"]["supports"] == ["90", "85"]
+        assert payload["findings"]["resistances"] == ["110"]
+
+    def test_none_findings_preserved(self) -> None:
+        result = AnalysisResult(
+            strategy="volatility_regime",
+            findings={"atr": None, "regime": "unknown"},
+            confidence=Confidence.LOW,
+        )
+        dto = AnalysisResultDTO.from_domain(result, reason_codes=[])
+        assert dto.findings["atr"] is None
+        assert dto.findings["regime"] == "unknown"
+
+
+class TestAnalysisReportDTO:
+    def test_from_domain_carries_all_strategies(self) -> None:
+        symbol = SymbolRegistry().get(
+            VenueId.KUCOIN,
+            "BTC",
+            "USDT",
+            market_type=MarketType.SPOT,
+            native_symbol="BTC-USDT",
+        )
+        r1 = AnalysisResult(
+            strategy="vwap",
+            findings={"vwap": Decimal("100")},
+            confidence=Confidence.HIGH,
+        )
+        r2 = AnalysisResult(
+            strategy="volatility_regime",
+            findings={"regime": "calm"},
+            confidence=Confidence.MEDIUM,
+        )
+        report = AnalysisReport(
+            symbol=symbol,
+            timeframe=Timeframe.H1,
+            results=(r1, r2),
+        )
+        dto = AnalysisReportDTO.from_domain(
+            report,
+            reason_codes=["provider:called"],
+        )
+        assert dto.venue == "kucoin"
+        assert dto.symbol == "BTC-USDT"
+        assert dto.timeframe == "1h"
+        assert len(dto.results) == 2
+        assert dto.results[0].strategy == "vwap"
+        assert dto.results[1].strategy == "volatility_regime"
+        assert dto.reason_codes == ["provider:called"]

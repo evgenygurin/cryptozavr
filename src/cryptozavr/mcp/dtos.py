@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from cryptozavr.application.services.market_analyzer import AnalysisReport
+from cryptozavr.application.strategies.base import AnalysisResult
 from cryptozavr.domain.assets import Asset
 from cryptozavr.domain.market_data import (
     OHLCVCandle,
@@ -280,4 +282,65 @@ class CategoryDTO(BaseModel):
             name=str(raw["name"]),
             market_cap=Decimal(str(mc)) if mc is not None else None,
             market_cap_change_24h_pct=(Decimal(str(mc_change)) if mc_change is not None else None),
+        )
+
+
+def _json_friendly(value: Any) -> Any:
+    """Recursively convert tuples → lists for model_dump(mode='json') safety."""
+    if isinstance(value, tuple):
+        return [_json_friendly(v) for v in value]
+    if isinstance(value, list):
+        return [_json_friendly(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _json_friendly(v) for k, v in value.items()}
+    return value
+
+
+class AnalysisResultDTO(BaseModel):
+    """Wire-format single-strategy analysis result."""
+
+    model_config = ConfigDict(frozen=True)
+
+    strategy: str
+    confidence: str
+    findings: dict[str, Any]
+    reason_codes: list[str]
+
+    @classmethod
+    def from_domain(
+        cls,
+        result: AnalysisResult,
+        reason_codes: list[str],
+    ) -> AnalysisResultDTO:
+        return cls(
+            strategy=result.strategy,
+            confidence=result.confidence.name.lower(),
+            findings=_json_friendly(result.findings),
+            reason_codes=list(reason_codes),
+        )
+
+
+class AnalysisReportDTO(BaseModel):
+    """Wire-format composite multi-strategy analysis report."""
+
+    model_config = ConfigDict(frozen=True)
+
+    venue: str
+    symbol: str
+    timeframe: str
+    results: list[AnalysisResultDTO]
+    reason_codes: list[str]
+
+    @classmethod
+    def from_domain(
+        cls,
+        report: AnalysisReport,
+        reason_codes: list[str],
+    ) -> AnalysisReportDTO:
+        return cls(
+            venue=report.symbol.venue.value,
+            symbol=report.symbol.native_symbol,
+            timeframe=report.timeframe.value,
+            results=[AnalysisResultDTO.from_domain(r, reason_codes=[]) for r in report.results],
+            reason_codes=list(reason_codes),
         )
