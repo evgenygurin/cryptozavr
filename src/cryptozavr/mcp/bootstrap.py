@@ -12,7 +12,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from cryptozavr.application.services.ohlcv_service import OhlcvService
+from cryptozavr.application.services.order_book_service import OrderBookService
 from cryptozavr.application.services.ticker_service import TickerService
+from cryptozavr.application.services.trades_service import TradesService
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.venues import MarketType, VenueId
 from cryptozavr.infrastructure.providers.factory import ProviderFactory
@@ -37,11 +39,19 @@ class AppState:
 
     ticker_service: TickerService
     ohlcv_service: OhlcvService
+    order_book_service: OrderBookService
+    trades_service: TradesService
 
 
 async def build_production_service(
     settings: Settings,
-) -> tuple[TickerService, OhlcvService, Callable[[], Awaitable[None]]]:
+) -> tuple[
+    TickerService,
+    OhlcvService,
+    OrderBookService,
+    TradesService,
+    Callable[[], Awaitable[None]],
+]:
     """Build production TickerService + OhlcvService and a cleanup coroutine."""
     http_registry = HttpClientRegistry()
 
@@ -99,6 +109,18 @@ async def build_production_service(
         providers=providers,
         gateway=gateway,
     )
+    order_book_service = OrderBookService(
+        registry=registry,
+        venue_states=venue_states,
+        providers=providers,
+        gateway=gateway,
+    )
+    trades_service = TradesService(
+        registry=registry,
+        venue_states=venue_states,
+        providers=providers,
+        gateway=gateway,
+    )
 
     async def cleanup() -> None:
         _LOG.info("cryptozavr shutting down")
@@ -115,4 +137,10 @@ async def build_production_service(
         except Exception as exc:
             _LOG.warning("pg pool close failed: %s", exc)
 
-    return ticker_service, ohlcv_service, cleanup
+    return (
+        ticker_service,
+        ohlcv_service,
+        order_book_service,
+        trades_service,
+        cleanup,
+    )
