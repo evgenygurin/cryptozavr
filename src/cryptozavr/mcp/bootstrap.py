@@ -13,8 +13,10 @@ from typing import Any
 
 from supabase import AsyncClient, acreate_client
 
+from cryptozavr.application.services.discovery_service import DiscoveryService
 from cryptozavr.application.services.ohlcv_service import OhlcvService
 from cryptozavr.application.services.order_book_service import OrderBookService
+from cryptozavr.application.services.symbol_resolver import SymbolResolver
 from cryptozavr.application.services.ticker_service import TickerService
 from cryptozavr.application.services.trades_service import TradesService
 from cryptozavr.domain.symbols import SymbolRegistry
@@ -120,6 +122,11 @@ async def build_production_service(
     )
     subscriber = RealtimeSubscriber(client=supabase_client)
 
+    symbol_resolver = SymbolResolver(registry)
+    discovery_service = DiscoveryService(
+        coingecko=providers[VenueId.COINGECKO],
+    )
+
     state: dict[str, Any] = {
         LIFESPAN_KEYS.ticker_service: ticker_service,
         LIFESPAN_KEYS.ohlcv_service: ohlcv_service,
@@ -127,7 +134,8 @@ async def build_production_service(
         LIFESPAN_KEYS.trades_service: trades_service,
         LIFESPAN_KEYS.subscriber: subscriber,
         LIFESPAN_KEYS.registry: registry,
-        # symbol_resolver + discovery_service populated by M3.2 resume.
+        LIFESPAN_KEYS.symbol_resolver: symbol_resolver,
+        LIFESPAN_KEYS.discovery_service: discovery_service,
     }
 
     async def cleanup() -> None:
