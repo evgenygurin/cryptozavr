@@ -52,3 +52,16 @@ def test_settings_invalid_mode_rejected(monkeypatch: pytest.MonkeyPatch) -> None
 
     with pytest.raises(ValidationError):
         Settings()
+
+
+def test_settings_missing_required_field(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing SUPABASE_URL raises ValidationError.
+
+    Passes `_env_file=None` so pydantic-settings skips the local `.env`
+    (which is populated from the cloud project in integration workflows).
+    """
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "local-dev-key")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)  # type: ignore[call-arg]
