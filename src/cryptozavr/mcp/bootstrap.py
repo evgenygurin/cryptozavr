@@ -1,0 +1,110 @@
+"""Production wiring for the MCP server.
+
+Creates infrastructure (HTTP, rate limiters, symbol registry, venue states,
+gateway, providers), assembles a TickerService, and returns a cleanup
+coroutine the caller must await on shutdown.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+
+from cryptozavr.application.services.ticker_service import TickerService
+from cryptozavr.domain.symbols import SymbolRegistry
+from cryptozavr.domain.venues import MarketType, VenueId
+from cryptozavr.infrastructure.providers.factory import ProviderFactory
+from cryptozavr.infrastructure.providers.http import HttpClientRegistry
+from cryptozavr.infrastructure.providers.rate_limiters import (
+    RateLimiterRegistry,
+)
+from cryptozavr.infrastructure.providers.state.venue_state import VenueState
+from cryptozavr.infrastructure.supabase.gateway import SupabaseGateway
+from cryptozavr.infrastructure.supabase.pg_pool import (
+    PgPoolConfig,
+    create_pool,
+)
+from cryptozavr.mcp.settings import Settings
+
+_LOG = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class AppState:
+    """Lifespan-scoped application state exposed to tools."""
+
+    ticker_service: TickerService
+
+
+async def build_production_service(
+    settings: Settings,
+) -> tuple[TickerService, Callable[[], Awaitable[None]]]:
+    """Build a production TickerService and a cleanup coroutine."""
+    http_registry = HttpClientRegistry()
+
+    rate_registry = RateLimiterRegistry()
+    rate_registry.register("kucoin", rate_per_sec=30.0, capacity=30)
+    rate_registry.register("coingecko", rate_per_sec=0.5, capacity=30)
+
+    registry = SymbolRegistry()
+    # MVP seed — extend to DB-driven in M2.5+.
+    registry.get(
+        VenueId.KUCOIN,
+        "BTC",
+        "USDT",
+        market_type=MarketType.SPOT,
+        native_symbol="BTC-USDT",
+    )
+    registry.get(
+        VenueId.KUCOIN,
+        "ETH",
+        "USDT",
+        market_type=MarketType.SPOT,
+        native_symbol="ETH-USDT",
+    )
+
+    venue_states = {
+        VenueId.KUCOIN: VenueState(VenueId.KUCOIN),
+        VenueId.COINGECKO: VenueState(VenueId.COINGECKO),
+    }
+
+    pg_pool = await create_pool(PgPoolConfig(dsn=settings.supabase_db_url))
+    gateway = SupabaseGateway(pg_pool, registry)
+
+    factory = ProviderFactory(
+        http_registry=http_registry,
+        rate_registry=rate_registry,
+    )
+    providers = {
+        VenueId.KUCOIN: factory.create_kucoin(
+            state=venue_states[VenueId.KUCOIN],
+        ),
+        VenueId.COINGECKO: await factory.create_coingecko(
+            state=venue_states[VenueId.COINGECKO],
+        ),
+    }
+
+    service = TickerService(
+        registry=registry,
+        venue_states=venue_states,
+        providers=providers,
+        gateway=gateway,
+    )
+
+    async def cleanup() -> None:
+        _LOG.info("cryptozavr shutting down")
+        try:
+            await http_registry.close_all()
+        except Exception as exc:
+            _LOG.warning("http registry close failed: %s", exc)
+        try:
+            await gateway.close()
+        except Exception as exc:
+            _LOG.warning("gateway close failed: %s", exc)
+        try:
+            await pg_pool.close()
+        except Exception as exc:
+            _LOG.warning("pg pool close failed: %s", exc)
+
+    return service, cleanup
