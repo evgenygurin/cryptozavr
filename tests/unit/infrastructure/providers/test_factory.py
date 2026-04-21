@@ -84,15 +84,19 @@ async def test_create_coingecko_returns_wrapped_provider(
 async def test_factory_uses_configured_ttls(
     rate_registry: RateLimiterRegistry,
 ) -> None:
-    factory = ProviderFactory(
-        http_registry=HttpClientRegistry(),
-        rate_registry=rate_registry,
-        ticker_ttl=2.0,
-        ohlcv_ttl=30.0,
-    )
-    state = VenueState(VenueId.KUCOIN)
-    provider = factory.create_kucoin(state=state, exchange=_FakeExchange())
-    # Dig into caching decorator
-    caching = provider._inner
-    assert caching._ticker_ttl == 2.0
-    assert caching._ohlcv_ttl == 30.0
+    http_registry = HttpClientRegistry()
+    try:
+        factory = ProviderFactory(
+            http_registry=http_registry,
+            rate_registry=rate_registry,
+            ticker_ttl=2.0,
+            ohlcv_ttl=30.0,
+        )
+        state = VenueState(VenueId.KUCOIN)
+        provider = factory.create_kucoin(state=state, exchange=_FakeExchange())
+        # Dig into caching decorator
+        caching = provider._inner
+        assert caching._ticker_ttl == 2.0
+        assert caching._ohlcv_ttl == 30.0
+    finally:
+        await http_registry.close_all()
