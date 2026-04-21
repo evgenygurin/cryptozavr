@@ -119,3 +119,63 @@ class SupabaseCacheHandler(FetchHandler):
             )
         # order_book / trades not cached in M2.2 — always miss
         return None
+
+
+class ProviderFetchHandler(FetchHandler):
+    """Terminal handler: calls the provider on cache miss + write-through."""
+
+    def __init__(self, *, provider: Any, gateway: Any) -> None:
+        self._provider = provider
+        self._gateway = gateway
+
+    async def handle(self, ctx: FetchContext) -> FetchContext:
+        if ctx.has_result():
+            return ctx  # cache hit — nothing to do
+
+        result = await self._fetch(ctx)
+        ctx.metadata["result"] = result
+        ctx.add_reason("provider:called")
+
+        await self._write_through(ctx, result)
+        return ctx
+
+    async def _fetch(self, ctx: FetchContext) -> Any:
+        req = ctx.request
+        op = req.operation.value
+        if op == "ticker":
+            return await self._provider.fetch_ticker(req.symbol)
+        if op == "ohlcv":
+            return await self._provider.fetch_ohlcv(
+                req.symbol,
+                req.timeframe,
+                since=req.since,
+                limit=req.limit,
+            )
+        if op == "order_book":
+            return await self._provider.fetch_order_book(
+                req.symbol,
+                depth=req.depth,
+            )
+        if op == "trades":
+            return await self._provider.fetch_trades(
+                req.symbol,
+                since=req.since,
+                limit=req.limit,
+            )
+        raise ValueError(f"unsupported operation: {op}")
+
+    async def _write_through(
+        self,
+        ctx: FetchContext,
+        result: Any,
+    ) -> None:
+        op = ctx.request.operation.value
+        try:
+            if op == "ticker":
+                await self._gateway.upsert_ticker(result)
+            elif op == "ohlcv":
+                await self._gateway.upsert_ohlcv(result)
+            # order_book / trades not cached in M2.2 — skip
+        except Exception as exc:
+            _LOG.warning("supabase write-through failed: %s", exc)
+            ctx.add_reason("cache:write_failed")

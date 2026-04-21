@@ -20,6 +20,7 @@ from cryptozavr.infrastructure.providers.chain.context import (
 )
 from cryptozavr.infrastructure.providers.chain.handlers import (
     FetchHandler,
+    ProviderFetchHandler,
     StalenessBypassHandler,
     SupabaseCacheHandler,
     SymbolExistsHandler,
@@ -240,3 +241,87 @@ class TestSupabaseCacheHandler:
             since=None,
             limit=100,
         )
+
+
+class _FakeProvider:
+    venue_id = "kucoin"
+
+    def __init__(self) -> None:
+        self.ticker_calls = 0
+        self.ohlcv_calls = 0
+
+    async def fetch_ticker(self, symbol):
+        self.ticker_calls += 1
+        return _make_cached_ticker(symbol)
+
+    async def fetch_ohlcv(self, symbol, timeframe, since=None, limit=500):
+        self.ohlcv_calls += 1
+        return f"ohlcv-{symbol.native_symbol}-{timeframe.value}"
+
+
+class TestProviderFetchHandler:
+    @pytest.mark.asyncio
+    async def test_cache_hit_skips_provider(self, btc_symbol) -> None:
+        provider = _FakeProvider()
+        gateway = MagicMock()
+        gateway.upsert_ticker = AsyncMock()
+        req = FetchRequest(operation=FetchOperation.TICKER, symbol=btc_symbol)
+        ctx = FetchContext(request=req)
+        ctx.metadata["result"] = "cached-ticker"
+        handler = ProviderFetchHandler(provider=provider, gateway=gateway)
+        result = await handler.handle(ctx)
+        assert result.metadata["result"] == "cached-ticker"
+        assert provider.ticker_calls == 0
+        gateway.upsert_ticker.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ticker_miss_calls_provider_and_upserts(
+        self,
+        btc_symbol,
+    ) -> None:
+        provider = _FakeProvider()
+        gateway = MagicMock()
+        gateway.upsert_ticker = AsyncMock()
+        req = FetchRequest(operation=FetchOperation.TICKER, symbol=btc_symbol)
+        ctx = FetchContext(request=req)
+        handler = ProviderFetchHandler(provider=provider, gateway=gateway)
+        result = await handler.handle(ctx)
+        assert result.metadata["result"] is not None
+        assert provider.ticker_calls == 1
+        assert "provider:called" in ctx.reason_codes
+        gateway.upsert_ticker.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_ohlcv_miss_calls_provider(self, btc_symbol) -> None:
+        provider = _FakeProvider()
+        gateway = MagicMock()
+        gateway.upsert_ohlcv = AsyncMock()
+        req = FetchRequest(
+            operation=FetchOperation.OHLCV,
+            symbol=btc_symbol,
+            timeframe=Timeframe.H1,
+            limit=50,
+        )
+        ctx = FetchContext(request=req)
+        handler = ProviderFetchHandler(provider=provider, gateway=gateway)
+        result = await handler.handle(ctx)
+        assert "ohlcv-BTC-USDT-1h" in result.metadata["result"]
+        assert provider.ohlcv_calls == 1
+        gateway.upsert_ohlcv.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_upsert_failure_does_not_break_response(
+        self,
+        btc_symbol,
+    ) -> None:
+        provider = _FakeProvider()
+        gateway = MagicMock()
+        gateway.upsert_ticker = AsyncMock(side_effect=RuntimeError("db down"))
+        req = FetchRequest(operation=FetchOperation.TICKER, symbol=btc_symbol)
+        ctx = FetchContext(request=req)
+        handler = ProviderFetchHandler(provider=provider, gateway=gateway)
+        # Should still succeed; write-through failure logged, not raised
+        result = await handler.handle(ctx)
+        assert result.metadata["result"] is not None
+        assert "provider:called" in ctx.reason_codes
+        assert "cache:write_failed" in ctx.reason_codes
