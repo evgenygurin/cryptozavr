@@ -27,5 +27,6 @@ repos:
         additional_dependencies:
           - pydantic>=2.9
           - pydantic-settings>=2.5
+          - fastmcp>=3.2.4
         files: ^src/
         args: [--config-file=pyproject.toml]
