@@ -32,7 +32,7 @@ def build_server(settings: Settings) -> FastMCP[None]:
         version=__version__,
     )
 
-    @mcp.tool(  # type: ignore[misc, unused-ignore]
+    @mcp.tool(
         name="echo",
         description=(
             "Smoke-test tool. Returns the provided message with server version. "
