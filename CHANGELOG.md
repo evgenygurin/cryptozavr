@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-22
+
+### Added — M3.1 MarketAnalyzer (Strategy pattern)
+- `AnalysisStrategy` Protocol (runtime_checkable) + `AnalysisResult` dataclass (strategy name, typed-dict findings, Confidence). Per MVP spec §5.
+- `VwapStrategy` — Volume-Weighted Average Price via typical (h+l+c)/3 × volume. Zero-volume bars counted in bars_used but skipped in the weighted sum. 5 unit tests.
+- `SupportResistanceStrategy` — swing-pivot SR detector with level clustering (default window=2, cluster_pct=0.5). 4 unit tests.
+- `VolatilityRegimeStrategy` — ATR-based regime classifier (calm/normal/high/extreme bands on ATR-as-%-of-close). Default window=14. 5 unit tests.
+- `MarketAnalyzer` Strategy context — dispatches to strategy registry by name, preserves caller-requested order, wraps results in `AnalysisReport` (symbol + timeframe + tuple[AnalysisResult]). 3 unit tests.
+- 20 new unit tests. Total 308 unit + 5 contract + 14 integration (skip-safe).
+
+### Next
+- M3.2: Discovery tools (resolve_symbol, list_symbols, list_categories, scan_trending) — 4 new MCP tools + SymbolResolver service.
+- M3.3: Analytics MCP tools on top of MarketAnalyzer (analyze_snapshot, compute_vwap, identify_support_resistance, volatility_regime).
+- M3.4: fetch_ohlcv_history streaming + SessionExplainer envelope + /cryptozavr:scan/analyze commands → tag v0.2.0 (MVP closure).
+
 ## [0.1.0] - 2026-04-22
 
 ### Added — M2.8 Production-ready multi-platform plugin
