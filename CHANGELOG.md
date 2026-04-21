@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-04-21
+
+### Added — M2.7 Realtime subscriber + cloud Supabase
+- Cloud Supabase project `midoijmwnzyptnnqqdws` (eu-west-1, Postgres 17) provisioned. All 7 migrations applied: extensions, reference, market_data, audit, rls, cron, realtime. Seed data (kucoin + coingecko venues) loaded. Completes M2.2 Task 9 (deferred for 5 milestones — now done).
+- `supabase/migrations/00000000000060_realtime.sql` — adds `cryptozavr.tickers_live` to the `supabase_realtime` publication. Other market-data tables excluded (batch writes would flood subscribers).
+- `RealtimeSubscriber` (replaces M2.2 stub): real `supabase-py` AsyncClient wrapper. `subscribe_tickers(venue_id, callback)` opens one channel per venue filtered by `venue_id=eq.<venue>`, streams INSERT/UPDATE/DELETE payloads. `close()` unsubscribes all channels and tears down the connection (best-effort — per-channel failures don't block the rest).
+- `AppState` now carries `subscriber: RealtimeSubscriber` alongside the four market-data services. `build_production_service` returns a 6-tuple. Lifespan cleanup closes the subscriber FIRST, before http/gateway/pg_pool — prevents websocket callbacks firing against closed connections.
+- Infrastructure: `pyproject.toml` + `.pre-commit-config.yaml` updated so `mypy` resolves `supabase` imports under both local and pre-commit venv.
+- 5 new unit tests (mocked AsyncClient + channel). 1 new integration test (`tests/integration/supabase/test_realtime_live.py`) — skip-safe when cloud env vars absent.
+- Total: 288 unit + 5 contract + 3 integration (skip-safe).
+
+### Deferred to M3+
+- MCP tool for realtime (`subscribe_ticker` as streaming tool) — needs FastMCP background task + notification plumbing. Phase 2 scope.
+- `.env` + live integration verification — requires user-provided DB password and service_role_key (dashboard secrets, not accessible via MCP).
+
+### Next
+- M3: L4 business logic — signals, triggers, alerts. Elicit-based approval flows for trading ops (later phase).
+
 ## [0.0.9] - 2026-04-21
 
 ### Added — M2.6 `get_order_book` + `get_trades` tools
