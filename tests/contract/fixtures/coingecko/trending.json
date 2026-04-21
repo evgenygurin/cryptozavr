@@ -1,0 +1,9 @@
+{
+  "coins": [
+    {"item": {"id": "bitcoin", "coin_id": 1, "name": "Bitcoin", "symbol": "BTC", "market_cap_rank": 1, "thumb": "btc.png", "small": "btc-s.png", "large": "btc-l.png", "slug": "bitcoin", "price_btc": 1.0, "score": 0}},
+    {"item": {"id": "ethereum", "coin_id": 279, "name": "Ethereum", "symbol": "ETH", "market_cap_rank": 2, "thumb": "eth.png", "small": "eth-s.png", "large": "eth-l.png", "slug": "ethereum", "price_btc": 0.05, "score": 1}},
+    {"item": {"id": "solana", "coin_id": 4128, "name": "Solana", "symbol": "SOL", "market_cap_rank": 5, "thumb": "sol.png", "small": "sol-s.png", "large": "sol-l.png", "slug": "solana", "price_btc": 0.003, "score": 2}}
+  ],
+  "nfts": [],
+  "categories": []
+}
