@@ -7,13 +7,26 @@ cat <<'EOF'
 # cryptozavr plugin loaded
 
 Slash commands:
-  /cryptozavr:ticker <venue> <symbol>           — fetch latest ticker
-  /cryptozavr:ohlcv <venue> <symbol> <timeframe> — fetch OHLCV candles
-  /cryptozavr:research <venue> <symbol>          — 4-tool research collage
-  /cryptozavr:health                             — MCP server smoke test
+  /cryptozavr:ticker <venue> <symbol>              — fetch latest ticker
+  /cryptozavr:ohlcv <venue> <symbol> <timeframe>   — OHLCV candles
+  /cryptozavr:research <venue> <symbol>            — 4-tool research collage
+  /cryptozavr:resolve <user_input> [venue]         — fuzzy symbol lookup
+  /cryptozavr:trending                             — CoinGecko trending + categories
+  /cryptozavr:health                               — MCP server smoke test
 
-Subagent: crypto-researcher (for multi-step market research)
+Subagent:
+  crypto-researcher — multi-step market research specialist
+
+MCP prompts (cross-client):
+  research_symbol(venue, symbol)   — 4-tool research template
+  risk_check(venue, symbol)        — data-quality pre-decision check
+
+MCP resources:
+  cryptozavr://venues              — supported venues
+  cryptozavr://symbols/{venue}     — symbols per venue
+  cryptozavr://trending            — trending assets (CoinGecko)
+  cryptozavr://categories          — market categories (CoinGecko)
 
 Venues seeded: kucoin, coingecko
-Need the 4 MCP tools? They auto-register from .mcp.json.
+Tools: echo, get_ticker, get_ohlcv, get_order_book, get_trades, resolve_symbol.
 EOF
