@@ -126,6 +126,14 @@ ignore_missing_imports = true
 module = "supabase.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "cryptozavr.application.services.discovery_service"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "cryptozavr.application.services.symbol_resolver"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
