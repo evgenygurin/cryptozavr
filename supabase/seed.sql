@@ -1,0 +1,2 @@
+-- Seed data for local development.
+-- Populated in M2 with reference data (venues, core symbol_aliases).
