@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-04-21
+
+### Added — M2.3c Chain of Responsibility + ProviderFactory
+- `FetchOperation` enum (ticker/ohlcv/order_book/trades).
+- `FetchRequest` (immutable) + `FetchContext` (mutable accumulator of reason_codes + metadata).
+- `FetchHandler` abstract base with `set_next`/`_forward`.
+- 5 concrete handlers: `VenueHealthHandler` (VenueState gate), `SymbolExistsHandler` (SymbolRegistry validation), `StalenessBypassHandler` (force_refresh → bypass_cache metadata), `SupabaseCacheHandler` (cache-aside via gateway), `ProviderFetchHandler` (terminal + write-through).
+- `build_ticker_chain` / `build_ohlcv_chain` assembly helpers.
+- `ProviderFactory` (Factory Method): `create_kucoin(state, exchange?)` / `create_coingecko(state)` return fully-wired providers (LoggingDecorator → CachingDecorator → RateLimitDecorator → RetryDecorator → base).
+- 22 new unit tests (226 total); provider layer coverage ≥ 90%.
+
+### Completes M2.3 Providers layer
+All 14 GoF patterns from MVP design section 4 implemented: Template Method (BaseProvider), Adapter (CCXT/CoinGecko), Bridge (Domain Protocol ↔ concrete providers), Decorator (4 layered), Chain of Responsibility (5 handlers), State (VenueState + 4 handlers), Factory Method (ProviderFactory), Singleton via DI (registries), Flyweight (SymbolRegistry from M2.1), Observer (Supabase Realtime, deferred to phase 1.5).
+
+### Next
+- M2.4: First MCP tool `get_ticker` through full stack (Chain → Factory → Decorators → Provider → SupabaseGateway cache-aside).
+
 ## [0.0.5] - 2026-04-21
 
 ### Added — M2.3b Decorators + State + CoinGecko
