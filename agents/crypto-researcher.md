@@ -13,6 +13,7 @@ description: |
   assistant: "crypto-researcher will pull the last 48 1h candles, compute trend + largest moves, and summarize."
   </example>
 model: sonnet
+color: cyan
 tools:
   - mcp__cryptozavr-research__get_ticker
   - mcp__cryptozavr-research__get_ohlcv

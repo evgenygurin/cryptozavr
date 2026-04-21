@@ -1,5 +1,6 @@
 ---
 description: Smoke-test the plugin — call the echo tool and confirm the MCP server is reachable.
+argument-hint: ""
 allowed-tools: ["mcp__cryptozavr-research__echo"]
 ---
 
