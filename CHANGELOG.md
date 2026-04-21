@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-04-21
+
+### Added — M2.3a Core providers
+- `HttpClientRegistry`: per-venue httpx.AsyncClient pool (Singleton via DI).
+- `TokenBucket` + `RateLimiterRegistry`: classic token-bucket rate limiter with asyncio.Lock-safe acquire.
+- `VenueState`: minimal State context holding current VenueStateKind; `require_operational()` raises on RATE_LIMITED/DOWN. Full transition rules in M2.3b.
+- `BaseProvider`: Template Method skeleton (require_operational → ensure_markets → fetch_raw → normalize → translate_exception) for ticker/ohlcv/orderbook/trades pipelines.
+- `CCXTAdapter`: pure static functions converting CCXT unified format to Domain (ticker/ohlcv/orderbook).
+- `CCXTProvider`: concrete BaseProvider wrapping ccxt.async_support (`for_kucoin` classmethod convenience). Exception translation: CCXT.RateLimitExceeded → RateLimitExceededError; CCXT.NetworkError → ProviderUnavailableError.
+- Contract tests: `tests/contract/` with saved KuCoin JSON fixtures (ticker/ohlcv/orderbook) and end-to-end provider test via FakeKucoin replay.
+- New deps: ccxt, httpx (m2 group); respx, freezegun (dev group).
+
+### Deferred to M2.3b
+- CoinGeckoAdapter + CoinGeckoProvider.
+- 4 Decorators: Retry, RateLimit, InMemoryCaching, Logging.
+- Full VenueState transition rules (HealthyState/DegradedState/RateLimitedState/DownState behaviours).
+
 ## [0.0.3] - 2026-04-21
 
 ### Added — M2.2 Supabase schema + Gateway
