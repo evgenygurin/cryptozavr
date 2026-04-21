@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-04-21
+
+### Added — M2.4 First MCP tool `get_ticker` (full stack)
+- `TickerDTO` (Pydantic): wire format with `venue`, `symbol`, `last`, `bid`, `ask`, `volume_24h`, `observed_at_ms`, `staleness`, `confidence`, `cache_hit`, `reason_codes`. `from_domain` factory.
+- `domain_to_tool_error`: maps `SymbolNotFoundError` / `VenueNotSupportedError` / `RateLimitExceededError` / `ProviderUnavailableError` / `ValidationError` / generic `DomainError` into user-facing `fastmcp.exceptions.ToolError`.
+- `TickerService` (L4 Application orchestrator): validates venue/symbol, builds the 5-handler chain per request, returns `TickerFetchResult` (ticker + reason codes). Unknown venue or symbol raises the matching domain exception.
+- `register_ticker_tool(mcp)`: `get_ticker(venue, symbol, force_refresh)` reads `TickerService` from `ctx.lifespan_context`, catches `DomainError`, returns `TickerDTO`.
+- `build_production_service(settings)`: wires `HttpClientRegistry`, `RateLimiterRegistry` (kucoin 30 rps, coingecko 0.5 rps), `SymbolRegistry` seeded with BTC-USDT + ETH-USDT on KuCoin, per-venue `VenueState`, `SupabaseGateway` over asyncpg pool, `ProviderFactory`-wrapped KuCoin + CoinGecko providers. Returns `(service, cleanup)`.
+- `build_server(settings)` now owns a FastMCP v3 `lifespan` that opens and closes all infra around `TickerService`. `FastMCP[AppState]` generic for typed lifespan context.
+- Manual smoke-test note: `docs/superpowers/m2.4-smoke-test.md`.
+- 17 new unit tests (TickerDTO 3 + errors 6 + TickerService 5 + get_ticker tool 3). Total ≥248 unit + 5 contract.
+
+### Next
+- M2.5: second tool (`get_ohlcv`) + Realtime subscribe stub + integration tests against live Supabase.
+
 ## [0.0.6] - 2026-04-21
 
 ### Added — M2.3c Chain of Responsibility + ProviderFactory
