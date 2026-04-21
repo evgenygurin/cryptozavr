@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from cryptozavr.domain.exceptions import SymbolNotFoundError
+from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.infrastructure.providers.chain.context import FetchContext
 from cryptozavr.infrastructure.providers.state.venue_state import VenueState
 
@@ -43,4 +45,32 @@ class VenueHealthHandler(FetchHandler):
     async def handle(self, ctx: FetchContext) -> FetchContext:
         self._state.require_operational()
         ctx.add_reason(f"venue:{self._state.kind.value}")
+        return await self._forward(ctx)
+
+
+class SymbolExistsHandler(FetchHandler):
+    """Second gate: verifies the symbol is known to SymbolRegistry."""
+
+    def __init__(self, registry: SymbolRegistry) -> None:
+        self._registry = registry
+
+    async def handle(self, ctx: FetchContext) -> FetchContext:
+        symbol = ctx.request.symbol
+        found = self._registry.find(symbol.venue, symbol.native_symbol)
+        if found is None:
+            raise SymbolNotFoundError(
+                user_input=symbol.native_symbol,
+                venue=symbol.venue.value,
+            )
+        ctx.add_reason("symbol:found")
+        return await self._forward(ctx)
+
+
+class StalenessBypassHandler(FetchHandler):
+    """Reads request.force_refresh; marks metadata so cache handler skips."""
+
+    async def handle(self, ctx: FetchContext) -> FetchContext:
+        if ctx.request.force_refresh:
+            ctx.metadata["bypass_cache"] = True
+            ctx.add_reason("cache:bypassed")
         return await self._forward(ctx)
