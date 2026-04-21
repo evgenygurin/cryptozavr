@@ -49,6 +49,47 @@ def build_ohlcv_chain(
     )
 
 
+def build_order_book_chain(
+    *,
+    state: VenueState,
+    registry: SymbolRegistry,
+    gateway: Any,
+    provider: Any,
+) -> FetchHandler:
+    """5-handler chain for order-book fetches.
+
+    Same topology as ticker/ohlcv; order-book is not cached in M2.2 — the
+    SupabaseCacheHandler returns None for this operation and the chain
+    always reaches ProviderFetchHandler.
+    """
+    return _build_chain(
+        state=state,
+        registry=registry,
+        gateway=gateway,
+        provider=provider,
+    )
+
+
+def build_trades_chain(
+    *,
+    state: VenueState,
+    registry: SymbolRegistry,
+    gateway: Any,
+    provider: Any,
+) -> FetchHandler:
+    """5-handler chain for trades fetches.
+
+    Trades are not cached in M2.2 — same non-caching behaviour as
+    order-book.
+    """
+    return _build_chain(
+        state=state,
+        registry=registry,
+        gateway=gateway,
+        provider=provider,
+    )
+
+
 def _build_chain(
     *,
     state: VenueState,
