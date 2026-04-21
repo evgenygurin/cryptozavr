@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-04-22
+
+### Added — M3.2 Discovery surface
+
+Built on top of the idiomatic M3.0 foundation (Depends DI + dict lifespan + ctx logging).
+
+**Services (L4)**
+- `SymbolResolver` — in-memory fuzzy user-input → Symbol. 3-step cascade: direct native_symbol hit → format variants (separator permutations + concatenated-form split on known quotes) → base-only lookup with default quotes (USDT/USD/BTC/ETH). Unknown venue → `VenueNotSupportedError`; nothing matched → `SymbolNotFoundError`.
+- `DiscoveryService` — thin facade over `CoinGeckoProvider.list_trending` + `list_categories` (decorated by Retry/RateLimit/Caching/Logging under the hood).
+
+**MCP surface**
+- Tool: `resolve_symbol(user_input, venue)` → `SymbolDTO`. Uses `Depends(get_symbol_resolver)` + `ctx.info` logging.
+- Resource: `cryptozavr://trending` — trending assets (CoinGecko). `idempotentHint=false` (rank shifts ~every 10min upstream).
+- Resource: `cryptozavr://categories` — category market cap + 24h change. `idempotentHint=true`.
+- Graceful degradation: upstream CoinGecko errors return `{"assets": [], "error": "..."}` payloads instead of crashing the resource read.
+
+**Plugin surface now**
+- **Tools (6)**: echo, get_ticker, get_ohlcv, get_order_book, get_trades, **resolve_symbol**
+- **Prompts (2)**: research_symbol, risk_check
+- **Resources (4)**: cryptozavr://venues, ://symbols/{venue}, **://trending**, **://categories**
+
+**Slash commands + banner**
+- `/cryptozavr:resolve <user_input> [venue]` — wraps resolve_symbol tool.
+- `/cryptozavr:trending` — reads both discovery resources, renders two compact tables.
+- SessionStart banner updated: 6 commands + 2 prompts + 4 resources + 6 tools enumerated.
+
+### Tests
+
+- `test_symbol_resolver.py` (7), `test_discovery_service.py` (3), `test_get_symbol_tool.py` (2), extended `test_resources.py` (+3). **15 new unit tests.**
+- Total: **337 unit + 5 contract + 14 integration (skip-safe)**.
+
+### Next
+
+- **M3.3**: Analytics MCP tools wrapping MarketAnalyzer (VWAP, Support/Resistance, VolatilityRegime) as `compute_vwap`, `identify_support_resistance`, `volatility_regime`, plus composite `analyze_snapshot`.
+- **M3.4**: `fetch_ohlcv_history` streaming + SessionExplainer envelope → tag v0.2.0 (MVP closure).
+
 ## [0.1.2] - 2026-04-22
 
 ### Refactored — M3.0 FastMCP v3 idiomatic cleanup
