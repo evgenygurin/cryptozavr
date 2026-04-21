@@ -1,88 +1,80 @@
 # cryptozavr
 
-Risk-first crypto market research plugin for Claude Code. Provides disciplined, declarative, and explainable market data tools through a FastMCP v3+ server with Supabase-backed cache and audit trail.
+Risk-first crypto market research plugin for Claude Code, OpenAI Codex, OpenCode, Cursor, and Gemini CLI. Provides 4 MCP tools over KuCoin and CoinGecko with Supabase-backed cache, provenance tracking, and auditable reasoning.
 
-**Status:** M1 Bootstrap complete. Data-layer and real tools arrive in M2+.
+## What's in the box
 
-See [docs/superpowers/specs/2026-04-21-cryptozavr-mvp-design.md](docs/superpowers/specs/2026-04-21-cryptozavr-mvp-design.md) for the full MVP design.
+**MCP tools**
+- `get_ticker(venue, symbol, force_refresh)` — last price + bid/ask + 24h stats
+- `get_ohlcv(venue, symbol, timeframe, limit, force_refresh)` — OHLCV candles (1m..1w)
+- `get_order_book(venue, symbol, depth, force_refresh)` — bids/asks + spread_bps
+- `get_trades(venue, symbol, limit, force_refresh)` — recent trade ticks
+
+**Slash commands**
+- `/cryptozavr:ticker <venue> <symbol>`
+- `/cryptozavr:ohlcv <venue> <symbol> <timeframe>`
+- `/cryptozavr:research <venue> <symbol>` (4-tool parallel collage)
+- `/cryptozavr:health` (smoke test)
+
+**Subagent**
+- `crypto-researcher` — specialist for multi-step market research (calm, explainable, no advice)
+
+**Skills**
+- `crypto-research` — when-to-invoke + tool-selection matrix
+- `interpreting-market-data` — field-by-field legend + red flags
+
+**Every response carries:**
+- `reason_codes` audit trail (5-handler chain: `venue → symbol → cache → provider`)
+- `staleness` + `cache_hit` — so you always know if data is fresh
+
+## Install
+
+Pick your platform:
+- [Claude Code](docs/README.claude-code.md)
+- [OpenAI Codex](docs/README.codex.md)
+- [OpenCode](docs/README.opencode.md)
+- [Cursor](.cursor-plugin/README.md)
+- [Gemini CLI](gemini-extension.json) — wired via the same mcpServers config
+
+## Env setup
+
+Copy `.env.example` → `.env` and fill:
+- `SUPABASE_URL` — your Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` — from Dashboard → API Keys → `service_role`
+- `SUPABASE_DB_URL` — PostgreSQL connection string (session pooler, port 5432)
+
+The cryptozavr MCP server needs Python 3.12 + `uv`. Install with:
+
+    uv sync --all-extras
 
 ## Philosophy
 
-1. **Risk-first, not signal-first.** Risk architecture precedes trading features.
-2. **Calm execution.** No FOMO, no panic. Dispassionate, institutional-minded.
-3. **Declarative over ad-hoc.** Strategies, risk policies, execution policies as Pydantic specs.
+1. **Risk-first, not signal-first.** Audit trail + provenance before prediction.
+2. **Calm execution.** Dispassionate, institutional-minded. No FOMO.
+3. **Declarative over ad-hoc.** Settings, thresholds, rate limits in config, not prompts.
 4. **Explainability and auditability.** Every answer contains `data`, `quality`, `reasoning`.
 5. **Safe agent design.** LLM proposes; human approves; deterministic code executes.
 
-## Quickstart
-
-### Prerequisites
-
-- Python 3.12 (`.python-version` pinned)
-- [uv](https://docs.astral.sh/uv/) for Python package management
-- [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started) for local DB stack
-- [Claude Code](https://www.anthropic.com/claude-code) for plugin integration
-- Docker Desktop (runs Supabase locally)
-
-### Install
-
-```bash
-git clone <repo-url> cryptozavr
-cd cryptozavr
-uv sync --all-extras
-cp .env.example .env
-./scripts/bootstrap-supabase.sh   # starts local Supabase stack
-```
-
-### Link plugin in Claude Code
-
-```text
-/plugin link /absolute/path/to/cryptozavr
-```
-
-Verify:
-```text
-/plugins                                  # cryptozavr should be connected
-# Then ask Claude: "Use the echo tool with message 'test'"
-```
-
-## Development
-
-Run tests:
-```bash
-uv run pytest tests/unit -v
-```
-
-Lint + typecheck:
-```bash
-uv run ruff check .
-uv run ruff format .
-uv run mypy src
-```
-
-Validate plugin artefacts:
-```bash
-uv run python scripts/validate-plugin.py
-```
-
-Run MCP server locally for debugging:
-```bash
-uv run fastmcp dev fastmcp.json
-```
+See [docs/superpowers/specs/2026-04-21-cryptozavr-mvp-design.md](docs/superpowers/specs/2026-04-21-cryptozavr-mvp-design.md) for the full MVP design.
 
 ## Architecture
 
-Layered onion: `domain/` (pure) → `application/` (use cases) → `infrastructure/` (providers + Supabase) → `mcp/` (FastMCP facade). See [design doc](docs/superpowers/specs/2026-04-21-cryptozavr-mvp-design.md) for details.
+- **Domain (L3)** — `src/cryptozavr/domain/`: frozen dataclasses (Ticker, OHLCVSeries, OrderBookSnapshot, TradeTick) + DataQuality envelope.
+- **Infrastructure (L2)** — `src/cryptozavr/infrastructure/`: CCXT adapter (KuCoin), CoinGecko HTTP client, Supabase gateway (asyncpg + supabase-py realtime), 4 decorators (Retry / RateLimit / InMemoryCache / Logging), 5-handler chain of responsibility.
+- **Application (L4)** — `src/cryptozavr/application/services/`: `TickerService`, `OhlcvService`, `OrderBookService`, `TradesService` — thin orchestrators over chain + factory + gateway.
+- **MCP (L5)** — `src/cryptozavr/mcp/`: FastMCP v3 server with lifespan, 4 tools, DTO layer.
 
-## Roadmap
+14 GoF patterns applied: Template Method, Adapter, Bridge, Decorator (4 layered), Chain of Responsibility (5 handlers), State (venue health), Factory Method, Singleton via DI, Flyweight (SymbolRegistry), Facade (SupabaseGateway).
 
-- **M1 Bootstrap** ✅ — repo, tooling, FastMCP skeleton with echo tool, CI.
-- **M2 Data layer** — Domain + Providers (KuCoin CCXT, CoinGecko) + Supabase schema + first real tool.
-- **M3 Full MCP surface** — all 17 tools, 8 resources, 2 prompts, Application services.
-- **M4 Plugin integration** — skills, slash-commands, E2E tests, v0.1.0 release.
+## Tests
 
-Post-MVP: strategy engine (phase 2), risk engine (phase 3), paper trading (phase 4), approval-gated live (phase 5), multi-exchange (phase 6+).
+    uv run pytest tests/unit tests/contract -m "not integration"   # 288 unit + 5 contract, ~2s
+    uv run pytest tests/integration                                 # 14 live tests, ~40s (needs .env)
+
+## Status
+
+**v0.1.0** — plugin готов к marketplace distribution. Data layer (M2.1–M2.6) + Realtime (M2.7) complete. Next: analytical layer (signals/triggers/alerts) in M3.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
