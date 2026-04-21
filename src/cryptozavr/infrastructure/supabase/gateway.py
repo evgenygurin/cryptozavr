@@ -13,7 +13,7 @@ uploads, rpc match_regimes.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 from uuid import UUID
 
@@ -52,7 +52,7 @@ class SupabaseGateway:
     ) -> None:
         self._pool = pool
         self._registry = symbol_registry
-        self._realtime = realtime or RealtimeSubscriber()
+        self._realtime = realtime or RealtimeSubscriber(client=None)
         self._storage = storage or StorageClient()
         self._rpc = rpc or RpcClient()
 
@@ -271,7 +271,7 @@ class SupabaseGateway:
     async def subscribe_tickers(
         self,
         venue_id: str,
-        callback: object,
+        callback: Callable[[object], None],
     ) -> SubscriptionHandle:
         return await self._realtime.subscribe_tickers(venue_id, callback)
 
