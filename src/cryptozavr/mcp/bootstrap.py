@@ -11,6 +11,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
+from cryptozavr.application.services.ohlcv_service import OhlcvService
 from cryptozavr.application.services.ticker_service import TickerService
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.venues import MarketType, VenueId
@@ -35,12 +36,13 @@ class AppState:
     """Lifespan-scoped application state exposed to tools."""
 
     ticker_service: TickerService
+    ohlcv_service: OhlcvService
 
 
 async def build_production_service(
     settings: Settings,
-) -> tuple[TickerService, Callable[[], Awaitable[None]]]:
-    """Build a production TickerService and a cleanup coroutine."""
+) -> tuple[TickerService, OhlcvService, Callable[[], Awaitable[None]]]:
+    """Build production TickerService + OhlcvService and a cleanup coroutine."""
     http_registry = HttpClientRegistry()
 
     rate_registry = RateLimiterRegistry()
@@ -85,7 +87,13 @@ async def build_production_service(
         ),
     }
 
-    service = TickerService(
+    ticker_service = TickerService(
+        registry=registry,
+        venue_states=venue_states,
+        providers=providers,
+        gateway=gateway,
+    )
+    ohlcv_service = OhlcvService(
         registry=registry,
         venue_states=venue_states,
         providers=providers,
@@ -107,4 +115,4 @@ async def build_production_service(
         except Exception as exc:
             _LOG.warning("pg pool close failed: %s", exc)
 
-    return service, cleanup
+    return ticker_service, ohlcv_service, cleanup

@@ -1,6 +1,6 @@
-"""FastMCP server bootstrap: echo + get_ticker.
+"""FastMCP server bootstrap: echo + get_ticker + get_ohlcv.
 
-Uses FastMCP v3 lifespan to own TickerService lifecycle.
+Uses FastMCP v3 lifespan to own TickerService and OhlcvService lifecycle.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from pydantic import Field
 from cryptozavr import __version__
 from cryptozavr.mcp.bootstrap import AppState, build_production_service
 from cryptozavr.mcp.settings import Settings
+from cryptozavr.mcp.tools.ohlcv import register_ohlcv_tool
 from cryptozavr.mcp.tools.ticker import register_ticker_tool
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,13 +51,16 @@ def build_server(settings: Settings) -> FastMCP[AppState]:
     async def lifespan(
         _server: FastMCP[AppState],
     ) -> AsyncIterator[AppState]:
-        service, cleanup = await build_production_service(settings)
+        ticker_service, ohlcv_service, cleanup = await build_production_service(settings)
         _LOGGER.info(
             "cryptozavr-research started",
             extra={"mode": settings.mode.value, "version": __version__},
         )
         try:
-            yield AppState(ticker_service=service)
+            yield AppState(
+                ticker_service=ticker_service,
+                ohlcv_service=ohlcv_service,
+            )
         finally:
             await cleanup()
 
@@ -67,6 +71,7 @@ def build_server(settings: Settings) -> FastMCP[AppState]:
     )
     _register_echo(mcp)
     register_ticker_tool(mcp)
+    register_ohlcv_tool(mcp)
     return mcp
 
 
