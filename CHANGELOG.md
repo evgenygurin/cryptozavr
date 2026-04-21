@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-04-21
+
+### Added — M2.5 `get_ohlcv` tool + integration tests
+- `OHLCVCandleDTO` / `OHLCVSeriesDTO` (Pydantic): wire formats for OHLCV data. Candle has opened_at_ms + OHLC + volume + closed; series has venue/symbol/timeframe/range/candles + reason_codes.
+- `OhlcvService` (L4 Application): mirror of `TickerService` — validates venue/symbol, builds the `build_ohlcv_chain` per request with `FetchOperation.OHLCV`, returns `OhlcvFetchResult` (series + reason codes).
+- `register_ohlcv_tool(mcp)`: `get_ohlcv(venue, symbol, timeframe, limit, force_refresh)` validates timeframe string → `Timeframe` enum (unknown → ValidationError → ToolError), reads `OhlcvService` from lifespan_context, catches `DomainError`, returns `OHLCVSeriesDTO`. `limit` bounded 1..1000.
+- `AppState` now carries both `ticker_service` and `ohlcv_service`. `build_production_service` returns a triple `(ticker_service, ohlcv_service, cleanup)`.
+- Integration tests: `tests/integration/mcp/test_tools_integration.py` runs `get_ticker` and `get_ohlcv` through the real FastMCP lifespan against live Supabase + KuCoin. Marked `@pytest.mark.integration`; auto-skip when `SUPABASE_DB_URL` / related vars are absent or Supabase is unreachable.
+- 14 new unit tests (OHLCV DTOs 4 + OhlcvService 5 + get_ohlcv tool 3 + 2 integration skip-safe). Total 260 unit + 5 contract + 2 integration (skip-safe).
+
+### Next
+- M2.6: `get_order_book`, `get_trades` (non-cached); refine Realtime stub (phase 1.5 prep).
+
 ## [0.0.7] - 2026-04-21
 
 ### Added — M2.4 First MCP tool `get_ticker` (full stack)
