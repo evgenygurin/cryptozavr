@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-22
+
+### Refactored — M3.0 FastMCP v3 idiomatic cleanup
+
+Five anti-patterns fixed (discovered during M3.2 pause; user flagged non-idiomatic v3 usage before propagation):
+
+- **Lifespan yields a `dict`**, not a dataclass. `FastMCP[AppState]` generic + `cast(Any, ctx.lifespan_context).attr` pattern removed. New module `src/cryptozavr/mcp/lifespan_state.py` with `LIFESPAN_KEYS` constants + 8 typed `Depends` accessors.
+- **`Depends(get_xxx_service)` injection** across all 4 market-data tools (get_ticker, get_ohlcv, get_order_book, get_trades). Dependency params hidden from MCP schema; services resolved at tool-call time per FastMCP v3 DI contract.
+- **`ctx.info` / `ctx.warning` logging** per tool call. Surfaces reason_codes, cache:write_failed, and non-fresh staleness warnings to MCP clients alongside the structured response.
+- **`FastMCP(mask_error_details=True)`** — non-ToolError exceptions no longer leak stack traces to clients.
+- 4 test files updated: `_AppState` dataclass fixtures replaced by dict-yielding lifespan with `LIFESPAN_KEYS`.
+
+### Added — prompts + catalog resources
+
+- `@mcp.prompt research_symbol(venue, symbol)` — 4-tool parallel research template (Price → Trend → Liquidity → Flow → Provenance).
+- `@mcp.prompt risk_check(venue, symbol)` — data-quality-first pre-decision check with PASS/DEGRADED/FAIL verdict based on staleness, spread, and tape imbalance.
+- `@mcp.resource cryptozavr://venues` — enumerated venue list (application/json).
+- `@mcp.resource cryptozavr://symbols/{venue}` — symbols-per-venue catalog. Unknown venue returns `{"error": "unsupported"}` payload (not an exception).
+- `SymbolRegistry.all_for_venue()` — stable-sorted enumeration helper.
+
+### Tests
+
+- `test_lifespan_state.py`, `test_prompts.py`, `test_resources.py` — 9 new tests.
+- 4 existing tool-test files updated to dict-yield lifespan.
+- Total **322 unit + 5 contract + 14 integration (skip-safe)**.
+
+### Plugin surface
+
+- **Tools**: 5 (echo + 4 market-data)
+- **Prompts**: 2 (research_symbol, risk_check) — cross-client portable
+- **Resources**: 2 (venues + symbols/{venue}) — client-cacheable
+
+### Next
+
+- **M3.2** (resumed): `SymbolResolver` + `DiscoveryService` + discovery tools (resolve_symbol) + discovery resources (trending, categories) — now built on the idiomatic foundation.
+- **M3.3**: analytics MCP tools on top of MarketAnalyzer.
+- **M3.4**: fetch_ohlcv_history streaming + SessionExplainer envelope → tag v0.2.0 (MVP closure).
+
 ## [0.1.1] - 2026-04-22
 
 ### Added — M3.1 MarketAnalyzer (Strategy pattern)
