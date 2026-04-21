@@ -1,0 +1,16 @@
+{
+  "$schema": "https://gofastmcp.com/public/schemas/fastmcp.json/v1.json",
+  "source": {
+    "path": "src/cryptozavr/mcp/server.py",
+    "entrypoint": "mcp"
+  },
+  "environment": {
+    "python": ">=3.12,<3.14",
+    "dependencies": [
+      "fastmcp>=3.2.4",
+      "pydantic>=2.9",
+      "pydantic-settings>=2.5",
+      "structlog>=24.4"
+    ]
+  }
+}
