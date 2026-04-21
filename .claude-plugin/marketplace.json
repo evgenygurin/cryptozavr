@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace-schema.json",
+  "name": "cryptozavr-marketplace",
+  "owner": {
+    "name": "Evgeny Gurin",
+    "email": "e.a.gurin@outlook.com"
+  },
+  "description": "Cryptozavr — risk-first crypto market research plugin.",
+  "plugins": [
+    {
+      "name": "cryptozavr",
+      "version": "0.1.0",
+      "source": {
+        "source": "git",
+        "url": "https://github.com/evgenygurin/cryptozavr"
+      },
+      "description": "4 MCP tools + agent + skills for disciplined crypto research.",
+      "keywords": ["crypto", "market-data", "research", "mcp"]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin-schema.json",
+  "name": "cryptozavr",
+  "version": "0.1.0",
+  "description": "Risk-first crypto market research — 4 MCP tools (get_ticker, get_ohlcv, get_order_book, get_trades) with Supabase-backed cache, provenance tracking, and auditable reasoning.",
+  "author": {
+    "name": "Evgeny Gurin",
+    "email": "e.a.gurin@outlook.com"
+  },
+  "homepage": "https://github.com/evgenygurin/cryptozavr",
+  "repository": "https://github.com/evgenygurin/cryptozavr",
+  "license": "MIT",
+  "keywords": [
+    "crypto",
+    "market-data",
+    "research",
+    "trading",
+    "mcp",
+    "kucoin",
+    "coingecko",
+    "supabase",
+    "risk-management"
+  ]
+}

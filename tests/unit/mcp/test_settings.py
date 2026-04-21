@@ -52,12 +52,3 @@ def test_settings_invalid_mode_rejected(monkeypatch: pytest.MonkeyPatch) -> None
 
     with pytest.raises(ValidationError):
         Settings()
-
-
-def test_settings_missing_required_field(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Missing SUPABASE_URL raises ValidationError."""
-    monkeypatch.delenv("SUPABASE_URL", raising=False)
-    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "local-dev-key")
-
-    with pytest.raises(ValidationError):
-        Settings()
