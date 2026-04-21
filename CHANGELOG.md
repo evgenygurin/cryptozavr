@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-04-21
+
+### Added — M2.3b Decorators + State + CoinGecko
+- `CoinGeckoAdapter`: pure functions `simple_price_to_ticker`, `trending_to_assets`, `categories_to_list`.
+- `CoinGeckoProvider`: BaseProvider subclass over httpx + HttpClientRegistry. Endpoints: `/simple/price`, `/search/trending`, `/coins/categories`. 429→RateLimitExceededError, connect/timeout→ProviderUnavailableError.
+- CoinGecko fixtures (3 files) + contract tests (2 tests) via respx.
+- `VenueState` upgraded to full State pattern with 4 handler classes (`HealthyStateHandler`, `DegradedStateHandler`, `RateLimitedStateHandler`, `DownStateHandler`). Automatic transitions: Healthy→Degraded (3 errors), Degraded→Healthy (5 successes), any→RateLimited (RateLimitExceededError, 30s cooldown), RateLimited→Healthy (expiry), any→Down (explicit `mark_down()`).
+- 4 composable decorators: `RetryDecorator` (exponential backoff, excludes RateLimitExceededError), `RateLimitDecorator` (TokenBucket acquire), `InMemoryCachingDecorator` (TTL cache per method family), `LoggingDecorator` (stdlib logging with durations).
+- Decorator chain integration test verifies `LoggingDecorator(CachingDecorator(RateLimitDecorator(RetryDecorator(base))))` composes correctly.
+
+### Deferred to M2.3c
+- Chain of Responsibility (5 handlers: VenueHealth, SymbolExists, StalenessBypass, SupabaseCache, ProviderFetch).
+- `ProviderFactory` (Factory Method).
+
 ## [0.0.4] - 2026-04-21
 
 ### Added — M2.3a Core providers
