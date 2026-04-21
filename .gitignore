@@ -75,3 +75,7 @@ logs/
 
 # Parquet/CSV exports (phase 2+)
 exports/
+
+# Override any global ~/.gitignore_global that might exclude these
+!.python-version
+!uv.lock
