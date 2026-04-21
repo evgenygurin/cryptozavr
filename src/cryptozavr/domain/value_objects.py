@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from functools import total_ordering
@@ -101,3 +102,28 @@ class Instant:
 
     def __repr__(self) -> str:
         return f"Instant({self._dt.isoformat()!r})"
+
+
+@dataclass(frozen=True, slots=True)
+class TimeRange:
+    """Half-open UTC interval [start, end). Invariant: end > start."""
+
+    start: Instant
+    end: Instant
+
+    def __post_init__(self) -> None:
+        if not (self.end > self.start):
+            raise ValidationError(
+                f"TimeRange requires end > start, got start={self.start!r} end={self.end!r}"
+            )
+
+    def duration_ms(self) -> int:
+        return self.end.to_ms() - self.start.to_ms()
+
+    def contains(self, moment: Instant) -> bool:
+        """True if start <= moment < end."""
+        return self.start <= moment < self.end
+
+    def estimate_bars(self, timeframe: Timeframe) -> int:
+        """Estimate how many full bars of the given timeframe fit in this range."""
+        return self.duration_ms() // timeframe.to_milliseconds()

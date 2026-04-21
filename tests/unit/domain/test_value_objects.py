@@ -9,7 +9,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from cryptozavr.domain.exceptions import ValidationError
-from cryptozavr.domain.value_objects import Instant, Timeframe
+from cryptozavr.domain.value_objects import Instant, Timeframe, TimeRange
 
 
 class TestTimeframe:
@@ -100,3 +100,40 @@ class TestInstant:
     @given(st.integers(min_value=0, max_value=2_000_000_000_000))
     def test_from_ms_to_ms_roundtrip_property(self, ms: int) -> None:
         assert Instant.from_ms(ms).to_ms() == ms
+
+
+class TestTimeRange:
+    def test_happy_path(self) -> None:
+        start = Instant.from_ms(1000)
+        end = Instant.from_ms(2000)
+        tr = TimeRange(start=start, end=end)
+        assert tr.start == start
+        assert tr.end == end
+
+    def test_rejects_end_not_after_start(self) -> None:
+        same = Instant.from_ms(1000)
+        with pytest.raises(ValidationError):
+            TimeRange(start=same, end=same)
+
+        with pytest.raises(ValidationError):
+            TimeRange(start=Instant.from_ms(2000), end=Instant.from_ms(1000))
+
+    def test_duration_ms(self) -> None:
+        tr = TimeRange(start=Instant.from_ms(1000), end=Instant.from_ms(3500))
+        assert tr.duration_ms() == 2500
+
+    def test_contains(self) -> None:
+        tr = TimeRange(start=Instant.from_ms(1000), end=Instant.from_ms(3000))
+        assert tr.contains(Instant.from_ms(1000))
+        assert tr.contains(Instant.from_ms(2000))
+        assert not tr.contains(Instant.from_ms(3000))
+        assert not tr.contains(Instant.from_ms(500))
+        assert not tr.contains(Instant.from_ms(4000))
+
+    def test_estimate_bars(self) -> None:
+        hour_range = TimeRange(
+            start=Instant.from_ms(0),
+            end=Instant.from_ms(3_600_000 * 10),
+        )
+        assert hour_range.estimate_bars(Timeframe.H1) == 10
+        assert hour_range.estimate_bars(Timeframe.M30) == 20
