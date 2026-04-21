@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from enum import StrEnum
 from functools import total_ordering
 
@@ -127,3 +128,49 @@ class TimeRange:
     def estimate_bars(self, timeframe: Timeframe) -> int:
         """Estimate how many full bars of the given timeframe fit in this range."""
         return self.duration_ms() // timeframe.to_milliseconds()
+
+
+@dataclass(frozen=True, slots=True)
+class Money:
+    """Monetary amount in a named currency. Never floats."""
+
+    amount: Decimal
+    currency: str
+
+    _MIN_CURRENCY_LEN: int = 3
+    _MAX_CURRENCY_LEN: int = 10
+
+    def __post_init__(self) -> None:
+        if not (self._MIN_CURRENCY_LEN <= len(self.currency) <= self._MAX_CURRENCY_LEN):
+            raise ValidationError(f"currency must be 3..10 characters, got {self.currency!r}")
+        if not self.currency.isupper() or not self.currency.isalnum():
+            raise ValidationError(f"currency must be uppercase alphanumeric, got {self.currency!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class Percentage:
+    """Percentage value (0..100 range not enforced — can be negative for deltas)."""
+
+    value: Decimal
+
+    def as_fraction(self) -> Decimal:
+        """Convert to fraction: 50% -> 0.5."""
+        return self.value / Decimal(100)
+
+    def as_bps(self) -> Decimal:
+        """Convert to basis points: 1% -> 100 bps."""
+        return self.value * Decimal(100)
+
+
+@dataclass(frozen=True, slots=True)
+class PriceSize:
+    """Price-size pair used in order book levels. price >= 0, size > 0."""
+
+    price: Decimal
+    size: Decimal
+
+    def __post_init__(self) -> None:
+        if self.price < 0:
+            raise ValidationError(f"PriceSize.price must be >= 0, got {self.price}")
+        if self.size <= 0:
+            raise ValidationError(f"PriceSize.size must be > 0, got {self.size}")

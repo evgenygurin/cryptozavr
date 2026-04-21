@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
 from cryptozavr.domain.exceptions import ValidationError
-from cryptozavr.domain.value_objects import Instant, Timeframe, TimeRange
+from cryptozavr.domain.value_objects import (
+    Instant,
+    Money,
+    Percentage,
+    PriceSize,
+    Timeframe,
+    TimeRange,
+)
 
 
 class TestTimeframe:
@@ -137,3 +145,61 @@ class TestTimeRange:
         )
         assert hour_range.estimate_bars(Timeframe.H1) == 10
         assert hour_range.estimate_bars(Timeframe.M30) == 20
+
+
+class TestMoney:
+    def test_happy_path(self) -> None:
+        m = Money(amount=Decimal("100.50"), currency="USDT")
+        assert m.amount == Decimal("100.50")
+        assert m.currency == "USDT"
+
+    def test_rejects_lowercase_currency(self) -> None:
+        with pytest.raises(ValidationError):
+            Money(amount=Decimal("1"), currency="usdt")
+
+    def test_rejects_short_currency(self) -> None:
+        with pytest.raises(ValidationError):
+            Money(amount=Decimal("1"), currency="US")
+
+    def test_rejects_long_currency(self) -> None:
+        with pytest.raises(ValidationError):
+            Money(amount=Decimal("1"), currency="USDTTOKEN123")
+
+    def test_equality_and_hash(self) -> None:
+        a = Money(amount=Decimal("1.0"), currency="BTC")
+        b = Money(amount=Decimal("1.0"), currency="BTC")
+        c = Money(amount=Decimal("1.0"), currency="ETH")
+        assert a == b
+        assert hash(a) == hash(b)
+        assert a != c
+
+
+class TestPercentage:
+    def test_happy_path(self) -> None:
+        p = Percentage(value=Decimal("12.5"))
+        assert p.value == Decimal("12.5")
+
+    def test_as_fraction(self) -> None:
+        assert Percentage(value=Decimal("50")).as_fraction() == Decimal("0.5")
+        assert Percentage(value=Decimal("100")).as_fraction() == Decimal("1")
+
+    def test_as_bps(self) -> None:
+        assert Percentage(value=Decimal("1")).as_bps() == Decimal("100")
+        assert Percentage(value=Decimal("0.01")).as_bps() == Decimal("1")
+
+
+class TestPriceSize:
+    def test_happy_path(self) -> None:
+        ps = PriceSize(price=Decimal("60000.50"), size=Decimal("0.125"))
+        assert ps.price == Decimal("60000.50")
+        assert ps.size == Decimal("0.125")
+
+    def test_rejects_negative_price(self) -> None:
+        with pytest.raises(ValidationError):
+            PriceSize(price=Decimal("-1"), size=Decimal("1"))
+
+    def test_rejects_non_positive_size(self) -> None:
+        with pytest.raises(ValidationError):
+            PriceSize(price=Decimal("1"), size=Decimal("0"))
+        with pytest.raises(ValidationError):
+            PriceSize(price=Decimal("1"), size=Decimal("-0.1"))
