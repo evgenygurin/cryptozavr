@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
 
@@ -129,3 +129,26 @@ class OrderBookSnapshot:
         if mid == 0:
             return None
         return (ask.price - bid.price) / mid * Decimal(10_000)
+
+
+@dataclass(frozen=True, slots=True)
+class TradeTick:
+    """Single executed trade."""
+
+    symbol: Symbol
+    price: Decimal
+    size: Decimal
+    side: TradeSide
+    executed_at: Instant
+    trade_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MarketSnapshot:
+    """Composite: ticker + orderbook + ohlcv + recent trades for one Symbol."""
+
+    symbol: Symbol
+    ticker: Ticker
+    orderbook: OrderBookSnapshot | None = None
+    ohlcv: dict[Timeframe, OHLCVSeries] = field(default_factory=dict)
+    recent_trades: tuple[TradeTick, ...] = field(default_factory=tuple)

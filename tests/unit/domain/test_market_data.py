@@ -7,11 +7,13 @@ from decimal import Decimal
 import pytest
 
 from cryptozavr.domain.market_data import (
+    MarketSnapshot,
     OHLCVCandle,
     OHLCVSeries,
     OrderBookSnapshot,
     Ticker,
     TradeSide,
+    TradeTick,
 )
 from cryptozavr.domain.quality import Confidence, DataQuality, Provenance, Staleness
 from cryptozavr.domain.symbols import Symbol, SymbolRegistry
@@ -222,3 +224,53 @@ class TestOrderBookSnapshot:
         assert ob.best_ask() is not None
         assert ob.spread() is None
         assert ob.spread_bps() is None
+
+
+class TestTradeTick:
+    def test_happy_path(self, btc_usdt: Symbol) -> None:
+        t = TradeTick(
+            symbol=btc_usdt,
+            price=Decimal("65000"),
+            size=Decimal("0.1"),
+            side=TradeSide.BUY,
+            executed_at=Instant.now(),
+        )
+        assert t.side == TradeSide.BUY
+
+
+class TestMarketSnapshot:
+    def test_happy_path(self, btc_usdt: Symbol, fresh_quality: DataQuality) -> None:
+        ticker = Ticker(
+            symbol=btc_usdt,
+            last=Decimal("65000"),
+            observed_at=Instant.now(),
+            quality=fresh_quality,
+        )
+        ob = OrderBookSnapshot(
+            symbol=btc_usdt,
+            bids=(PriceSize(price=Decimal("64999"), size=Decimal("1")),),
+            asks=(PriceSize(price=Decimal("65001"), size=Decimal("1")),),
+            observed_at=Instant.now(),
+            quality=fresh_quality,
+        )
+        snap = MarketSnapshot(
+            symbol=btc_usdt,
+            ticker=ticker,
+            orderbook=ob,
+            ohlcv={},
+            recent_trades=(),
+        )
+        assert snap.ticker is ticker
+        assert snap.orderbook is ob
+
+    def test_minimal_snapshot(self, btc_usdt: Symbol, fresh_quality: DataQuality) -> None:
+        ticker = Ticker(
+            symbol=btc_usdt,
+            last=Decimal("65000"),
+            observed_at=Instant.now(),
+            quality=fresh_quality,
+        )
+        snap = MarketSnapshot(symbol=btc_usdt, ticker=ticker)
+        assert snap.orderbook is None
+        assert snap.ohlcv == {}
+        assert snap.recent_trades == ()
