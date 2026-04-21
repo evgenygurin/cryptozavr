@@ -8,12 +8,16 @@ All handlers inherit FetchHandler base. Each either:
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
+from typing import Any
 
 from cryptozavr.domain.exceptions import SymbolNotFoundError
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.infrastructure.providers.chain.context import FetchContext
 from cryptozavr.infrastructure.providers.state.venue_state import VenueState
+
+_LOG = logging.getLogger(__name__)
 
 
 class FetchHandler(ABC):
@@ -74,3 +78,44 @@ class StalenessBypassHandler(FetchHandler):
             ctx.metadata["bypass_cache"] = True
             ctx.add_reason("cache:bypassed")
         return await self._forward(ctx)
+
+
+class SupabaseCacheHandler(FetchHandler):
+    """Try to short-circuit the chain via Supabase-cached result.
+
+    Respects metadata["bypass_cache"] set by StalenessBypassHandler.
+    Gateway errors are caught and logged — they don't break the chain.
+    """
+
+    def __init__(self, gateway: Any) -> None:
+        self._gateway = gateway
+
+    async def handle(self, ctx: FetchContext) -> FetchContext:
+        if ctx.metadata.get("bypass_cache"):
+            return await self._forward(ctx)
+
+        try:
+            cached = await self._lookup(ctx)
+        except Exception as exc:
+            _LOG.warning("supabase cache lookup failed: %s", exc)
+            ctx.add_reason("cache:error")
+            return await self._forward(ctx)
+
+        if cached is not None:
+            ctx.metadata["result"] = cached
+            ctx.add_reason("cache:hit")
+            return ctx
+
+        ctx.add_reason("cache:miss")
+        return await self._forward(ctx)
+
+    async def _lookup(self, ctx: FetchContext) -> Any:
+        req = ctx.request
+        if req.operation.value == "ticker":
+            return await self._gateway.load_ticker(req.symbol)
+        if req.operation.value == "ohlcv":
+            return await self._gateway.load_ohlcv(
+                req.symbol, req.timeframe, since=req.since, limit=req.limit
+            )
+        # order_book / trades not cached in M2.2 — always miss
+        return None
