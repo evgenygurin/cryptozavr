@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from cryptozavr import __version__
 from cryptozavr.mcp.server import build_server
 from cryptozavr.mcp.settings import Settings
 
@@ -21,14 +22,14 @@ def settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
 
 
 async def test_echo_tool_returns_the_same_message(settings: Settings) -> None:
-    """echo(message) -> {"message": message, "version": "0.0.1"}."""
+    """echo(message) -> {"message": message, "version": __version__}."""
     mcp = build_server(settings)
 
     result = await mcp.call_tool("echo", {"message": "hello cryptozavr"})
 
     assert result.structured_content == {
         "message": "hello cryptozavr",
-        "version": "0.0.1",
+        "version": __version__,
     }
 
 
@@ -38,7 +39,7 @@ async def test_echo_tool_handles_empty_string(settings: Settings) -> None:
 
     result = await mcp.call_tool("echo", {"message": ""})
 
-    assert result.structured_content == {"message": "", "version": "0.0.1"}
+    assert result.structured_content == {"message": "", "version": __version__}
 
 
 async def test_echo_tool_rejects_missing_message(settings: Settings) -> None:

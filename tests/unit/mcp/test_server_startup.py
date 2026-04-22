@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from cryptozavr import __version__
 from cryptozavr.mcp.server import build_server
 from cryptozavr.mcp.settings import Mode, Settings
 
@@ -24,7 +25,7 @@ def test_build_server_returns_fastmcp_instance(settings: Settings) -> None:
     mcp = build_server(settings)
 
     assert mcp.name == "cryptozavr-research"
-    assert mcp.version == "0.0.1"
+    assert mcp.version == __version__
 
 
 async def test_build_server_registers_echo_tool(settings: Settings) -> None:
