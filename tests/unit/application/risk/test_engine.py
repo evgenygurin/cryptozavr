@@ -12,6 +12,7 @@ from cryptozavr.application.risk.engine import (
 )
 from cryptozavr.application.risk.handlers import (
     CooldownHandler,
+    DailyLossHandler,
     ExposureHandler,
     KillSwitchHandler,
     LiquidityHandler,
@@ -82,14 +83,15 @@ def _benign_intent() -> TradeIntent:
 # --- default_handler_chain --------------------------------------------------
 
 
-def test_default_handler_chain_returns_canonical_5_in_order() -> None:
+def test_default_handler_chain_returns_canonical_6_in_order() -> None:
     chain = default_handler_chain()
-    assert len(chain) == 5
+    assert len(chain) == 6
     assert isinstance(chain[0], RiskPolicyHandler)
     assert isinstance(chain[1], ExposureHandler)
     assert isinstance(chain[2], LiquidityHandler)
-    assert isinstance(chain[3], CooldownHandler)
-    assert isinstance(chain[4], KillSwitchHandler)
+    assert isinstance(chain[3], DailyLossHandler)
+    assert isinstance(chain[4], CooldownHandler)
+    assert isinstance(chain[5], KillSwitchHandler)
 
 
 # --- end-to-end scenarios ---------------------------------------------------

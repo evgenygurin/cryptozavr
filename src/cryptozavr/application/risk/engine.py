@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from cryptozavr.application.risk.handlers import (
     CooldownHandler,
+    DailyLossHandler,
     ExposureHandler,
     KillSwitchHandler,
     LiquidityHandler,
@@ -25,11 +26,15 @@ from cryptozavr.domain.risk import (
 
 
 def default_handler_chain() -> tuple[RiskHandler, ...]:
-    """Canonical order per MVP spec: policy → exposure → liquidity → cooldown → kill."""
+    """Canonical order per MVP spec.
+
+    RiskPolicy → Exposure → Liquidity → DailyLoss → Cooldown → KillSwitch.
+    """
     return (
         RiskPolicyHandler(),
         ExposureHandler(),
         LiquidityHandler(),
+        DailyLossHandler(),
         CooldownHandler(),
         KillSwitchHandler(),
     )

@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from cryptozavr.application.risk.handlers import (
     CooldownHandler,
+    DailyLossHandler,
     ExposureHandler,
     KillSwitchHandler,
     LiquidityHandler,
@@ -151,6 +152,56 @@ class TestLiquidityHandler:
         assert v.policy_field == "min_balance_buffer"
         assert v.observed == Decimal("50")
         assert v.limit == Decimal("100")
+
+
+# --- DailyLossHandler (max_daily_loss_pct) ----------------------------------
+
+
+class TestDailyLossHandler:
+    def test_skip_when_today_pnl_pct_is_none(self) -> None:
+        """No PnL data yet (first bar / backtest warm-up) — skip silently."""
+        h = DailyLossHandler()
+        intent = _sample_intent(today_pnl_pct=None)
+        assert h.evaluate(intent, _valid_policy(), KillSwitch()) is None
+
+    def test_no_violation_when_loss_below_limit(self) -> None:
+        """today_pnl_pct = -0.03; threshold = -0.05; -0.03 > -0.05 → clean."""
+        h = DailyLossHandler()
+        intent = _sample_intent(today_pnl_pct=Decimal("-0.03"))
+        policy = _valid_policy(
+            max_daily_loss_pct=LimitDecimal(value=Decimal("0.05")),
+        )
+        assert h.evaluate(intent, policy, KillSwitch()) is None
+
+    def test_violation_at_negative_limit_boundary_inclusive(self) -> None:
+        """today_pnl_pct == -max_daily_loss_pct → violation (inclusive)."""
+        h = DailyLossHandler()
+        intent = _sample_intent(today_pnl_pct=Decimal("-0.05"))
+        policy = _valid_policy(
+            max_daily_loss_pct=LimitDecimal(value=Decimal("0.05")),
+        )
+        v = h.evaluate(intent, policy, KillSwitch())
+        assert v is not None
+        assert v.severity == Severity.DENY
+        assert v.handler_name == "DailyLoss"
+        assert v.policy_field == "max_daily_loss_pct"
+        assert v.observed == Decimal("-0.05")
+        assert v.limit == Decimal("-0.05")
+
+    def test_violation_when_loss_exceeds_limit_preserves_custom_severity(self) -> None:
+        h = DailyLossHandler()
+        intent = _sample_intent(today_pnl_pct=Decimal("-0.10"))
+        policy = _valid_policy(
+            max_daily_loss_pct=LimitDecimal(
+                value=Decimal("0.05"),
+                severity=Severity.WARN,
+            ),
+        )
+        v = h.evaluate(intent, policy, KillSwitch())
+        assert v is not None
+        assert v.severity == Severity.WARN
+        assert v.observed == Decimal("-0.10")
+        assert v.limit == Decimal("-0.05")
 
 
 # --- CooldownHandler (recent_losses) ----------------------------------------

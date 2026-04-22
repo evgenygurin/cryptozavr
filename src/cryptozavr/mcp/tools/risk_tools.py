@@ -270,9 +270,7 @@ def register_risk_tools(mcp: FastMCP) -> None:
             "Persist and activate a RiskPolicy. Inserts a new row; idempotent "
             "by BLAKE2b content_hash (re-saving the same policy returns the "
             "existing id). Save + activation run in one transaction — partial "
-            "failure never leaves an orphan row. "
-            "Note: max_daily_loss_pct is currently stored but not enforced by "
-            "any handler."
+            "failure never leaves an orphan row."
         ),
         tags={"risk", "phase-3"},
         timeout=30.0,
