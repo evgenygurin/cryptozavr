@@ -30,6 +30,14 @@ class SymbolNotFoundError(NotFoundError):
         super().__init__(f"symbol {user_input!r} was not found on venue {venue!r}")
 
 
+class WatchNotFoundError(NotFoundError):
+    """Raised when a watch_id does not exist in the registry."""
+
+    def __init__(self, watch_id: str) -> None:
+        super().__init__(f"Watch not found: {watch_id!r}")
+        self.watch_id = watch_id
+
+
 class VenueNotSupportedError(NotFoundError):
     """Requested venue is not registered / not supported."""
 
