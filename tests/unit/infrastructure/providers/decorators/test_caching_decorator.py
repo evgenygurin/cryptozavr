@@ -61,3 +61,49 @@ async def test_different_symbols_are_independent() -> None:
     await decorator.fetch_ticker("BTC/USDT")
     await decorator.fetch_ticker("ETH/USDT")
     assert provider.ticker_calls == 2
+
+
+class _FakeProvider:
+    """Exercises both ticker and ohlcv cache buckets for invalidation tests."""
+
+    venue_id = "kucoin"
+
+    def __init__(self) -> None:
+        self.ticker_calls = 0
+        self.ohlcv_calls = 0
+
+    async def fetch_ticker(self, symbol: str) -> str:
+        self.ticker_calls += 1
+        return f"ticker-{symbol}-{self.ticker_calls}"
+
+    async def fetch_ohlcv(self, symbol: str) -> str:
+        self.ohlcv_calls += 1
+        return f"ohlcv-{symbol}-{self.ohlcv_calls}"
+
+
+@pytest.mark.asyncio
+async def test_invalidate_tickers_drops_only_ticker_entries() -> None:
+    base = _FakeProvider()
+    cache = InMemoryCachingDecorator(base, ticker_ttl=60.0, ohlcv_ttl=60.0)
+
+    first_ticker = await cache.fetch_ticker("BTC/USDT")
+    first_ohlcv = await cache.fetch_ohlcv("BTC/USDT")
+
+    cache.invalidate_tickers()
+
+    second_ticker = await cache.fetch_ticker("BTC/USDT")
+    second_ohlcv = await cache.fetch_ohlcv("BTC/USDT")
+
+    assert first_ticker != second_ticker
+    assert first_ohlcv == second_ohlcv
+    assert base.ticker_calls == 2
+    assert base.ohlcv_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_invalidate_tickers_is_noop_when_cache_empty() -> None:
+    base = _FakeProvider()
+    cache = InMemoryCachingDecorator(base, ticker_ttl=60.0)
+    cache.invalidate_tickers()
+    result = await cache.fetch_ticker("BTC/USDT")
+    assert result == "ticker-BTC/USDT-1"

@@ -74,6 +74,11 @@ class InMemoryCachingDecorator:
     async def close(self) -> None:
         await self._inner.close()
 
+    def invalidate_tickers(self) -> None:
+        """Drop all ticker cache entries; other TTL buckets untouched."""
+        for key in [k for k in self._cache if k.startswith("ticker:")]:
+            del self._cache[key]
+
     async def _cached(
         self,
         key: str,
