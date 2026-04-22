@@ -1,5 +1,12 @@
 # cryptozavr — MVP Design
 
+> **Status (2026-04-22, v0.3.1 shipped):** Phase 0 (bootstrap) + Phase 1 (MVP) + Phase 1.5 (Realtime + Observability) **landed**. The MVP-deliverables
+> list below was the original target; the §9 Resources, §10 Prompts, §11 Plugin
+> layout, §12 Phase roadmap, and §13 Patterns map are annotated inline with the
+> actual shipped counts/names. Sections that drift are called out via
+> **(shipped)** / **(actual)** markers. See `README.md` + `CHANGELOG.md` for the
+> authoritative current surface.
+
 **Status:** Draft (awaiting user approval)
 **Date:** 2026-04-21
 **Scope:** Phase 0 + Phase 1 (MVP research-only market intelligence plugin)
@@ -56,6 +63,8 @@
 
 ### MVP deliverables
 
+**Original target (2026-04-21):**
+
 - 17 MCP tools (market intelligence, analysis, discovery, ops)
 - 8 MCP resource URI-templates (venue/symbol/research/reference)
 - 2 MCP prompts (market_overview, symbol_analysis)
@@ -63,6 +72,25 @@
 - 3 Claude Code slash-commands (/cryptozavr:scan, :analyze, :health)
 - Full Supabase schema: 10 таблиц, RLS policies, pg_cron jobs
 - Coverage 85%+ (95%+ на domain, 90%+ на providers)
+
+**Shipped (v0.3.1):**
+
+- **16 MCP tools** — echo, get_ticker, get_ohlcv, get_order_book, get_trades,
+  resolve_symbol, compute_vwap, identify_support_resistance, volatility_regime,
+  analyze_snapshot, fetch_ohlcv_history, list_venues, list_symbols,
+  list_trending, list_categories, get_venue_health.
+- **4 static resources + 1 URI-template** — `cryptozavr://venues`,
+  `cryptozavr://symbols/{venue}`, `cryptozavr://trending`,
+  `cryptozavr://categories`, `cryptozavr://venue_health`.
+- **2 MCP prompts** — `research_symbol(venue, symbol)`,
+  `risk_check(venue, symbol)`.
+- **4 Claude Code skills** — `crypto-research`, `interpreting-market-data`,
+  `venue-debug`, `post-session-reflection`.
+- **8 Claude Code slash-commands** — `health`, `ticker`, `ohlcv`, `research`,
+  `resolve`, `trending`, `analyze`, `history`.
+- **7 SQL migrations** (extensions, reference, market_data, audit, rls, cron,
+  realtime), RLS policies active, pg_cron jobs wired.
+- **473 passing unit + contract tests** on merged `main`.
 
 ### What MVP will NOT do
 
@@ -974,26 +1002,44 @@ async def get_ohlcv(
 
 **Shape:** `guard → resolve → delegate → envelope`. Body не содержит доменной логики.
 
-### Resources (8 URI-шаблонов)
+### Resources (shipped)
+
+Original target: 8 URI-templates under `venue://` / `symbol://` / `research://`
+/ `reference://` namespaces. **v0.3.1 ships 5** under a single
+`cryptozavr://` scheme (simpler for MCP clients, keeps query-log work in
+tools rather than resources):
 
 ```text
-venue://{venue_id}/manifest          # capabilities, limits, last sync
-venue://{venue_id}/state             # VenueState + 24h history
-symbol://{venue_id}/{base}_{quote}/manifest
-symbol://{venue_id}/{code}/meta      # CoinGecko metadata
-research://queries/recent?limit=50&client_id=<id>
-research://queries/{query_id}
-reference://timeframes
-reference://market-categories
-reference://venues
+cryptozavr://venues                  # static list of supported venue ids
+cryptozavr://symbols/{venue}         # URI-template — symbols registered per venue
+cryptozavr://trending                # CoinGecko trending (0-indexed synthetic rank)
+cryptozavr://categories              # CoinGecko market categories
+cryptozavr://venue_health            # per-venue state + last_checked_ms (Phase 1.5)
 ```
 
-**Важно** (из v3-notes): resources возвращают `str` / `bytes` / `ResourceResult`. Dict/list raises TypeError. Используем `model_dump_json()`.
+The deferred namespaces (`research://queries/...`, `reference://timeframes`)
+are reopened in Phase 2 if `SessionExplainer` needs a query-log resource.
 
-### Prompts (2)
+**Wire format** (from FastMCP v3 `servers/resources.mdx`): resources return
+`str`, `bytes`, or `ResourceResult`. All five above return
+`ResourceResult(ResourceContent(content=json.dumps(...),
+mime_type="application/json"))` so URI-template resources also keep the
+`application/json` MIME (FastMCP drops the decorator-level hint for
+parameterised resources).
 
-- `market_overview` — system prompt для широкого скана (focus_venue, focus_quote, horizon).
-- `symbol_analysis` — deep-dive procedure для одного символа.
+For clean JSON **rendering in the client** — not just wire format — Phase 1.5
+added tool equivalents that return Pydantic DTOs and therefore populate
+`CallToolResult.structuredContent` (native JSON instead of escaped strings):
+`list_venues`, `list_symbols`, `list_trending`, `list_categories`,
+`get_venue_health`.
+
+### Prompts (shipped)
+
+- `research_symbol(venue, symbol)` — 4-tool parallel research template
+  (renamed from `market_overview`; same role).
+- `risk_check(venue, symbol)` — data-quality pre-decision check
+  (renamed from `symbol_analysis`; role narrowed to quality signals rather
+  than deep-dive analysis, which now lives in the `analyze_snapshot` tool).
 
 ### Providers composition
 
@@ -1117,32 +1163,43 @@ MODE_CAPABILITIES[Mode.RESEARCH_ONLY] = frozenset({
 }
 ```
 
-### Skills (3 в MVP)
+### Skills (shipped — 4)
 
 ```text
 skills/
-  market-scan/SKILL.md
-  symbol-analysis/
-    SKILL.md
-    references/tf-selection.md
-    references/quality-flags.md
-  quality-check/SKILL.md
+  crypto-research/SKILL.md           # when-to-invoke + tool-selection matrix
+  interpreting-market-data/SKILL.md  # field-by-field legend + red flags
+  venue-debug/SKILL.md               # Phase 1.5 — walk the L2 chain to pinpoint failures
+  post-session-reflection/SKILL.md   # Phase 1.5 — 3-bullet produced/decided/next wrap-up
 ```
 
-Каждая `SKILL.md` — frontmatter + процедура (When to use / Workflow / Constraints / Output format / What NOT to do).
+Original 3-skill set (`market-scan`, `symbol-analysis`, `quality-check`) was
+consolidated into `crypto-research` + `interpreting-market-data`; Phase 1.5
+added the two observability/reflection skills.
 
-### Commands (3)
+### Commands (shipped — 8)
 
 ```text
 commands/
-  scan.md             # /cryptozavr:scan [focus]
-  analyze.md          # /cryptozavr:analyze <symbol>
-  health.md           # /cryptozavr:health
+  analyze.md          # /cryptozavr:analyze <venue> <symbol> [timeframe] [limit]
+  health.md           # /cryptozavr:health — echo + cryptozavr://venue_health
+  history.md          # /cryptozavr:history <venue> <symbol> <timeframe> <since_ms> <until_ms>
+  ohlcv.md            # /cryptozavr:ohlcv <venue> <symbol> <timeframe> [limit]
+  research.md         # /cryptozavr:research <venue> <symbol>
+  resolve.md          # /cryptozavr:resolve <user_input> [venue]
+  ticker.md           # /cryptozavr:ticker <venue> <symbol>
+  trending.md         # /cryptozavr:trending
 ```
 
-### Hooks
+The original `scan` command was subsumed into `research` (tool-parallel collage)
++ `trending` (discovery catalog).
 
-**MVP: пусто.** В phase 1.5+ добавим `SessionStart` hook для инъекции venue_health. В phase 5+ — `PreToolUse` для блокировки execution tools вне нужного Mode.
+### Hooks (shipped)
+
+**`SessionStart` hook** (`hooks/session-start.sh` + `hooks/hooks.json`)
+prints a 28-line plugin-loaded banner listing slash commands, subagent,
+MCP prompts + resources, and a pointer to `cryptozavr://venue_health`.
+Phase 5+ still reserves `PreToolUse` for Mode-gated execution.
 
 ### Installation
 
@@ -1199,19 +1256,24 @@ cryptozavr/
 │   └── runbooks/
 │
 ├── skills/
-│   ├── market-scan/SKILL.md
-│   ├── symbol-analysis/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   └── quality-check/SKILL.md
+│   ├── crypto-research/SKILL.md
+│   ├── interpreting-market-data/SKILL.md
+│   ├── venue-debug/SKILL.md
+│   └── post-session-reflection/SKILL.md
 │
 ├── commands/
-│   ├── scan.md
 │   ├── analyze.md
-│   └── health.md
+│   ├── health.md
+│   ├── history.md
+│   ├── ohlcv.md
+│   ├── research.md
+│   ├── resolve.md
+│   ├── ticker.md
+│   └── trending.md
 │
 ├── hooks/
-│   └── .gitkeep
+│   ├── hooks.json
+│   └── session-start.sh
 │
 ├── supabase/
 │   ├── config.toml
@@ -1356,29 +1418,43 @@ async def test_get_ohlcv_returns_envelope(mcp_server, in_memory_services):
 
 **Acceptance:** `/plugin link ./` в Claude Code показывает cryptozavr connected.
 
-### Phase 1 — MVP (3-4 недели)
+### Phase 1 — MVP (3-4 недели) — **shipped (v0.2.0)**
 
 **Scope:** полная реализация всего, что описано в разделах 3–10.
 
-**Acceptance:**
-- Все 17 tools отвечают envelope-ом.
-- `/cryptozavr:scan trending` проходит end-to-end.
-- `/cryptozavr:analyze BTC/USDT` возвращает carded analysis.
-- `fetch_ohlcv_history` стримит progress через task.
-- pg_cron jobs работают.
-- CI green (unit + contract + mcp + integration).
-- Coverage ≥ 85%.
+**Acceptance (as shipped, v0.2.0):**
+- 11 MCP tools отвечают envelope-ом (echo + 4 market-data + resolve_symbol
+  + 4 analytics + fetch_ohlcv_history).
+- `/cryptozavr:research kucoin BTC-USDT` проходит end-to-end (4-tool parallel
+  collage заменил изначальный `scan trending`).
+- `/cryptozavr:analyze kucoin BTC-USDT 1h` возвращает carded composite analysis.
+- `fetch_ohlcv_history` стримит progress через `ctx.report_progress` (task=True
+  не понадобилось — in-process paginator справился в лимите).
+- pg_cron jobs работают (`prune-stale-tickers`, `prune-query-log`).
+- CI green (unit + contract + mcp). Integration tests skip-safe без `.env`.
+- Test count 373 unit + contract.
 
 **Red lines:** никаких write-capabilities, никаких API keys бирж, никаких strategies/risk/execution.
 
-### Phase 1.5 — Realtime + Observability (1-1.5 недели)
+### Phase 1.5 — Realtime + Observability (1-1.5 недели) — **shipped (v0.3.0 + v0.3.1)**
 
-- Supabase Realtime: подписка на `tickers_live`, invalidate L0 cache.
-- `TickerSyncWorker` background task.
-- `MetricsDecorator` (Prometheus).
-- `HealthMonitor` — периодический ping.
-- `SessionStart` hook — инжект venue_health summary.
+- Supabase Realtime: подписка на `tickers_live`, invalidate L0 cache через
+  `CacheInvalidator` (pessimistic all-venue invalidation когда payload
+  не содержит `venue_id`; `tickers_live` хранит только `symbol_id`).
+- `TickerSyncWorker` background task (parallel fan-out через `asyncio.gather`,
+  `CancelledError` re-raise).
+- `MetricsDecorator` (Prometheus-compatible) — пятый decorator, позиционирован
+  **над** RetryDecorator, чтобы retries не double-counted.
+- `HealthMonitor` — периодический ping, обновляет `VenueState.last_checked_at_ms`
+  после probe completion (монотонно).
+- `SessionStart` hook — banner с command cheat-sheet + pointer на
+  `cryptozavr://venue_health`.
 - 2 новые skills: `venue-debug`, `post-session-reflection`.
+- 5 catalog tools (`list_venues`, `list_symbols`, `list_trending`,
+  `list_categories`, `get_venue_health`) возвращают Pydantic DTOs в
+  `CallToolResult.structuredContent` — добавлены в v0.3.1 follow-up для
+  чистого JSON rendering в clients.
+- Всего +100 tests (373 → 473).
 
 **Red lines:** те же, что Phase 1.
 
@@ -1479,7 +1555,7 @@ async def test_get_ohlcv_returns_envelope(mcp_server, in_memory_services):
 | 7 | **Factory Method** | L2 | `ProviderFactory.create_kucoin()`, `create_coingecko()` |
 | 8 | **Flyweight** | L3 | `SymbolRegistry`, `VenueRegistry` |
 | 9 | **Iterator** | L4 | `OHLCVPaginator` (async iterator над большими историческими окнами) |
-| 10 | **Observer** | L1 ↔ L4 | Supabase Realtime `postgres_changes` → MCP session cache (phase 1.5) |
+| 10 | **Observer** | L1 ↔ L4 | Supabase Realtime `postgres_changes` → `CacheInvalidator` → provider.invalidate_tickers (shipped in Phase 1.5 / v0.3.0) |
 | 11 | **Singleton (via DI)** | L1, L2 | `HttpClientRegistry`, `RateLimiterRegistry`, `SymbolRegistry`, `SupabaseGateway`, `asyncpg.Pool` |
 | 12 | **State** | L2 | `VenueState` + Healthy/Degraded/RateLimited/Down handlers |
 | 13 | **Strategy** | L4 | `AnalysisStrategy` family + `MarketAnalyzer` context |
