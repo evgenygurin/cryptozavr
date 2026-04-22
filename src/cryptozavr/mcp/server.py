@@ -20,6 +20,7 @@ from cryptozavr.mcp.bootstrap import build_production_service
 from cryptozavr.mcp.prompts.research import register_prompts
 from cryptozavr.mcp.resources.catalogs import register_resources
 from cryptozavr.mcp.settings import Settings
+from cryptozavr.mcp.tools.analytics import register_analytics_tools
 from cryptozavr.mcp.tools.discovery import register_resolve_symbol_tool
 from cryptozavr.mcp.tools.ohlcv import register_ohlcv_tool
 from cryptozavr.mcp.tools.order_book import register_order_book_tool
@@ -79,6 +80,7 @@ def build_server(settings: Settings) -> FastMCP:
     register_order_book_tool(mcp)
     register_trades_tool(mcp)
     register_resolve_symbol_tool(mcp)
+    register_analytics_tools(mcp)
     register_prompts(mcp)
     register_resources(mcp)
     return mcp

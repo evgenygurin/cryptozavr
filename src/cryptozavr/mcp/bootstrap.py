@@ -13,12 +13,19 @@ from typing import Any
 
 from supabase import AsyncClient, acreate_client
 
+from cryptozavr.application.services.analytics_service import AnalyticsService
 from cryptozavr.application.services.discovery_service import DiscoveryService
+from cryptozavr.application.services.market_analyzer import MarketAnalyzer
 from cryptozavr.application.services.ohlcv_service import OhlcvService
 from cryptozavr.application.services.order_book_service import OrderBookService
 from cryptozavr.application.services.symbol_resolver import SymbolResolver
 from cryptozavr.application.services.ticker_service import TickerService
 from cryptozavr.application.services.trades_service import TradesService
+from cryptozavr.application.strategies.support_resistance import (
+    SupportResistanceStrategy,
+)
+from cryptozavr.application.strategies.volatility import VolatilityRegimeStrategy
+from cryptozavr.application.strategies.vwap import VwapStrategy
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.venues import MarketType, VenueId
 from cryptozavr.infrastructure.providers.factory import ProviderFactory
@@ -116,6 +123,18 @@ async def build_production_service(
         gateway=gateway,
     )
 
+    analyzer = MarketAnalyzer(
+        strategies={
+            "vwap": VwapStrategy(),
+            "support_resistance": SupportResistanceStrategy(),
+            "volatility_regime": VolatilityRegimeStrategy(),
+        },
+    )
+    analytics_service = AnalyticsService(
+        ohlcv_service=ohlcv_service,
+        analyzer=analyzer,
+    )
+
     supabase_client: AsyncClient = await acreate_client(
         settings.supabase_url,
         settings.supabase_service_role_key,
@@ -132,6 +151,7 @@ async def build_production_service(
         LIFESPAN_KEYS.ohlcv_service: ohlcv_service,
         LIFESPAN_KEYS.order_book_service: order_book_service,
         LIFESPAN_KEYS.trades_service: trades_service,
+        LIFESPAN_KEYS.analytics_service: analytics_service,
         LIFESPAN_KEYS.subscriber: subscriber,
         LIFESPAN_KEYS.registry: registry,
         LIFESPAN_KEYS.symbol_resolver: symbol_resolver,

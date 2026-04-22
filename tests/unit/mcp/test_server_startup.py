@@ -37,6 +37,19 @@ async def test_build_server_registers_echo_tool(settings: Settings) -> None:
     assert "echo" in tool_names
 
 
+async def test_build_server_registers_analytics_tools(settings: Settings) -> None:
+    """4 analytics tools must be registered after server build."""
+    mcp = build_server(settings)
+
+    tools = await mcp.list_tools()
+    tool_names = {tool.name for tool in tools}
+
+    assert "compute_vwap" in tool_names
+    assert "identify_support_resistance" in tool_names
+    assert "volatility_regime" in tool_names
+    assert "analyze_snapshot" in tool_names
+
+
 async def test_build_server_respects_current_mode(settings: Settings) -> None:
     """Server exposes current mode (for future mode-aware tools)."""
     build_server(settings)
