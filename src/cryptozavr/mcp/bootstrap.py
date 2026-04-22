@@ -121,20 +121,53 @@ async def build_production_service(
     metrics_registry = MetricsRegistry()
 
     registry = SymbolRegistry()
-    registry.get(
-        VenueId.KUCOIN,
+    # Pre-seed high-liquidity KuCoin USDT pairs so list_symbols has a useful
+    # default surface. SymbolResolver auto-registers any other BASE-QUOTE on
+    # first resolve, so this is just a convenience catalogue — not a whitelist.
+    for _base in (
         "BTC",
-        "USDT",
-        market_type=MarketType.SPOT,
-        native_symbol="BTC-USDT",
-    )
-    registry.get(
-        VenueId.KUCOIN,
         "ETH",
-        "USDT",
-        market_type=MarketType.SPOT,
-        native_symbol="ETH-USDT",
-    )
+        "SOL",
+        "XRP",
+        "DOGE",
+        "ADA",
+        "AVAX",
+        "LINK",
+        "MATIC",
+        "LTC",
+        "DOT",
+        "BCH",
+        "TON",
+        "NEAR",
+        "ATOM",
+        "APT",
+        "SUI",
+        "ARB",
+        "OP",
+        "INJ",
+        "SEI",
+        "TIA",
+        "PEPE",
+        "SHIB",
+        "AAVE",
+        "UNI",
+        "ICP",
+        "FIL",
+        "ETC",
+        "XLM",
+        "HBAR",
+        "VET",
+        "ALGO",
+        "ZEC",
+        "KAS",
+    ):
+        registry.get(
+            VenueId.KUCOIN,
+            _base,
+            "USDT",
+            market_type=MarketType.SPOT,
+            native_symbol=f"{_base}-USDT",
+        )
     venue_states = {
         VenueId.KUCOIN: VenueState(VenueId.KUCOIN),
         VenueId.COINGECKO: VenueState(VenueId.COINGECKO),
