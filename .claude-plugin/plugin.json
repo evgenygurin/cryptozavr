@@ -1,6 +1,6 @@
 {
   "name": "cryptozavr",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Risk-first crypto market research — 16 MCP tools (market data, analytics, catalog + observability), 4 resources + 1 URI template, 2 prompts, Supabase-backed cache, realtime cache invalidation, provenance tracking, and auditable reasoning.",
   "author": {
     "name": "Evgeny Gurin",
@@ -19,5 +19,17 @@
     "coingecko",
     "supabase",
     "risk-management"
-  ]
+  ],
+  "mcpServers": {
+    "cryptozavr-research": {
+      "command": "sh",
+      "args": [
+        "-c",
+        ". ${CLAUDE_PLUGIN_ROOT}/.env && uv run --directory ${CLAUDE_PLUGIN_ROOT} python -m cryptozavr.mcp.server"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
 }
