@@ -9,17 +9,17 @@ from tests.unit.application.analytics.fixtures import make_report
 
 
 def test_ten_percent_gain() -> None:
-    report = make_report(initial="1000", final="1100")
+    report = make_report(equity_curve=("1000", "1050", "1100"))
     assert TotalReturnVisitor().visit(report) == Decimal("0.1")
 
 
 def test_twenty_percent_loss() -> None:
-    report = make_report(initial="1000", final="800")
+    report = make_report(equity_curve=("1000", "900", "800"))
     assert TotalReturnVisitor().visit(report) == Decimal("-0.2")
 
 
 def test_zero_return_when_final_equals_initial() -> None:
-    report = make_report(initial="1000", final="1000")
+    report = make_report(equity_curve=("1000", "1000", "1000"))
     assert TotalReturnVisitor().visit(report) == Decimal("0")
 
 

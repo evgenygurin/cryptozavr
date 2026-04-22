@@ -37,11 +37,19 @@ def _trade(day: int, pnl: str, *, size: str = "1") -> BacktestTrade:
 
 def make_report(
     *,
-    initial: str = "1000",
-    final: str = "1100",
+    initial: str | None = None,
+    final: str | None = None,
     equity_curve: tuple[str, ...] = ("1000", "1050", "1100"),
     trades: tuple[BacktestTrade, ...] = (),
 ) -> BacktestReport:
+    # Keep fixture consistent with BacktestReport's cross-field invariants:
+    # if a curve is supplied, initial/final default to its endpoints.
+    if equity_curve:
+        initial = initial if initial is not None else equity_curve[0]
+        final = final if final is not None else equity_curve[-1]
+    else:
+        initial = initial if initial is not None else "1000"
+        final = final if final is not None else initial
     last_day = max(len(equity_curve), 1)
     return BacktestReport(
         strategy_name="test",

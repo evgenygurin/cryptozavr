@@ -175,8 +175,12 @@ Uses TDD (`superpowers:test-driven-development` skill). Per visitor:
    - Sharpe of a constant equity curve is `0` (stdev denominator).
    - Annualisation factor scales Sharpe linearly by `sqrt(factor)`.
 
-Test count target: ~25 unit tests for 2C (5 visitors × ~4 cases + 5
-composer tests).
+Test count target: ≥ 40 unit tests for 2C. Post-review reality (~42):
+5 visitors × 4-9 cases each (Sharpe 9, MaxDrawdown 7, ProfitFactor 5,
+TotalReturn 4, WinRate 6) + 5 composer tests + 6 DTO invariant tests.
+Sharpe-heavy because of None/variance/rf/annualisation/ground-truth
+contracts; the originally-estimated "~4 cases per visitor" undercounted
+the semantic edge cases the review exposed.
 
 ## Interface contract for 2B (future)
 
@@ -207,8 +211,9 @@ its integration test will construct a report and feed it through
 ## Acceptance for 2C
 
 - All modules listed under Architecture exist and pass type-checks.
-- ≥ 25 unit tests covering happy path + edge cases, hypothesis for
-  Sharpe / MaxDrawdown.
+- ≥ 40 unit tests covering happy path + edge cases, hypothesis for
+  Sharpe / MaxDrawdown, ground-truth numeric check for Sharpe, 5-visitor
+  end-to-end composer test including `None`-valued results.
 - `uv run ruff check . && uv run ruff format --check . && uv run mypy src`
   all pass.
 - No regressions — total suite remains 473 + 2C additions.

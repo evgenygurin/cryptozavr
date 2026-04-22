@@ -33,7 +33,9 @@ def test_total_loss_returns_one() -> None:
     assert MaxDrawdownVisitor().visit(report) == Decimal("1")
 
 
-def test_empty_curve_returns_zero() -> None:
+def test_empty_curve_returns_none() -> None:
+    """Empty curve → None so callers can distinguish 'no drawdown observed'
+    from 'no data to observe'."""
     bare = BacktestReport(
         strategy_name="x",
         period=TimeRange(
@@ -45,7 +47,7 @@ def test_empty_curve_returns_zero() -> None:
         trades=(),
         equity_curve=(),
     )
-    assert MaxDrawdownVisitor().visit(bare) == Decimal("0")
+    assert MaxDrawdownVisitor().visit(bare) is None
 
 
 def test_name() -> None:
@@ -77,7 +79,8 @@ def test_property_monotone_increasing_curve_has_zero_drawdown(
         trades=(),
         equity_curve=curve,
     )
-    assert MaxDrawdownVisitor().visit(report) == Decimal("0")
+    result = MaxDrawdownVisitor().visit(report)
+    assert result == Decimal("0")
 
 
 @given(
@@ -104,4 +107,7 @@ def test_property_drawdown_is_in_zero_one(values: list[Decimal]) -> None:
         equity_curve=curve,
     )
     dd = MaxDrawdownVisitor().visit(report)
+    # Non-empty curve is guaranteed by strategy (min_size=2); dd must be a
+    # concrete Decimal in [0, 1], never None.
+    assert dd is not None
     assert Decimal("0") <= dd <= Decimal("1")
