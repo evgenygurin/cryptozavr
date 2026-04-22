@@ -26,17 +26,20 @@ if TYPE_CHECKING:
     from cryptozavr.application.services.order_book_service import (
         OrderBookService,
     )
+    from cryptozavr.application.services.position_watcher import PositionWatcher
     from cryptozavr.application.services.symbol_resolver import SymbolResolver
     from cryptozavr.application.services.ticker_service import TickerService
     from cryptozavr.application.services.trades_service import TradesService
     from cryptozavr.domain.symbols import SymbolRegistry
     from cryptozavr.domain.venues import VenueId
+    from cryptozavr.domain.watch import WatchState
     from cryptozavr.infrastructure.persistence.risk_policy_repo import (
         RiskPolicyRepository,
     )
     from cryptozavr.infrastructure.persistence.strategy_spec_repo import (
         StrategySpecRepository,
     )
+    from cryptozavr.infrastructure.providers.kucoin_ws import KucoinWsProvider
     from cryptozavr.infrastructure.providers.state.venue_state import VenueState
     from cryptozavr.infrastructure.supabase.realtime import RealtimeSubscriber
 
@@ -63,6 +66,9 @@ class _LifespanKeys:
     risk_policy_repo: str = "risk_policy_repo"
     risk_engine: str = "risk_engine"
     kill_switch: str = "kill_switch"
+    ws_provider: str = "ws_provider"
+    position_watcher: str = "position_watcher"
+    watch_registry: str = "watch_registry"
 
 
 LIFESPAN_KEYS = _LifespanKeys()
@@ -134,3 +140,24 @@ def get_risk_engine(ctx: Any = _CTX) -> RiskEngine:
 
 def get_kill_switch(ctx: Any = _CTX) -> KillSwitch:
     return cast("KillSwitch", ctx.lifespan_context[LIFESPAN_KEYS.kill_switch])
+
+
+def get_position_watcher(ctx: Any = _CTX) -> PositionWatcher:
+    return cast(
+        "PositionWatcher",
+        ctx.lifespan_context[LIFESPAN_KEYS.position_watcher],
+    )
+
+
+def get_watch_registry(ctx: Any = _CTX) -> dict[str, WatchState]:
+    return cast(
+        "dict[str, WatchState]",
+        ctx.lifespan_context[LIFESPAN_KEYS.watch_registry],
+    )
+
+
+def get_ws_provider(ctx: Any = _CTX) -> KucoinWsProvider:
+    return cast(
+        "KucoinWsProvider",
+        ctx.lifespan_context[LIFESPAN_KEYS.ws_provider],
+    )

@@ -7,6 +7,7 @@ dict keyed by `LIFESPAN_KEYS` for Depends(get_xxx_service) injection.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -25,6 +26,7 @@ from cryptozavr.application.services.health_monitor import (
 from cryptozavr.application.services.market_analyzer import MarketAnalyzer
 from cryptozavr.application.services.ohlcv_service import OhlcvService
 from cryptozavr.application.services.order_book_service import OrderBookService
+from cryptozavr.application.services.position_watcher import PositionWatcher
 from cryptozavr.application.services.symbol_resolver import SymbolResolver
 from cryptozavr.application.services.ticker_service import TickerService
 from cryptozavr.application.services.ticker_sync_worker import TickerSyncWorker
@@ -36,6 +38,7 @@ from cryptozavr.application.strategies.volatility import VolatilityRegimeStrateg
 from cryptozavr.application.strategies.vwap import VwapStrategy
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.venues import MarketType, VenueId
+from cryptozavr.domain.watch import WatchState
 from cryptozavr.infrastructure.observability.metrics import MetricsRegistry
 from cryptozavr.infrastructure.persistence.risk_policy_repo import (
     RiskPolicyRepository,
@@ -45,6 +48,7 @@ from cryptozavr.infrastructure.persistence.strategy_spec_repo import (
 )
 from cryptozavr.infrastructure.providers.factory import ProviderFactory
 from cryptozavr.infrastructure.providers.http import HttpClientRegistry
+from cryptozavr.infrastructure.providers.kucoin_ws import KucoinWsProvider
 from cryptozavr.infrastructure.providers.rate_limiters import (
     RateLimiterRegistry,
 )
@@ -129,7 +133,6 @@ async def build_production_service(
         market_type=MarketType.SPOT,
         native_symbol="ETH-USDT",
     )
-
     venue_states = {
         VenueId.KUCOIN: VenueState(VenueId.KUCOIN),
         VenueId.COINGECKO: VenueState(VenueId.COINGECKO),
@@ -204,6 +207,13 @@ async def build_production_service(
         coingecko=providers[VenueId.COINGECKO],
     )
 
+    ws_provider = KucoinWsProvider()
+    watch_registry: dict[str, WatchState] = {}
+    position_watcher = PositionWatcher(
+        ws_provider=ws_provider,
+        registry=watch_registry,
+    )
+
     (
         health_monitor,
         ticker_sync_worker,
@@ -235,10 +245,15 @@ async def build_production_service(
         LIFESPAN_KEYS.risk_policy_repo: risk_policy_repo,
         LIFESPAN_KEYS.risk_engine: risk_engine,
         LIFESPAN_KEYS.kill_switch: kill_switch,
+        LIFESPAN_KEYS.ws_provider: ws_provider,
+        LIFESPAN_KEYS.position_watcher: position_watcher,
+        LIFESPAN_KEYS.watch_registry: watch_registry,
     }
 
     async def cleanup() -> None:
         await _shutdown(
+            watch_registry=watch_registry,
+            ws_provider=ws_provider,
             cache_invalidator=cache_invalidator,
             ticker_sync_worker=ticker_sync_worker,
             health_monitor=health_monitor,
@@ -254,6 +269,8 @@ async def build_production_service(
 
 async def _shutdown(
     *,
+    watch_registry: dict[str, WatchState],
+    ws_provider: KucoinWsProvider,
     cache_invalidator: CacheInvalidator,
     ticker_sync_worker: TickerSyncWorker,
     health_monitor: HealthMonitor,
@@ -264,6 +281,20 @@ async def _shutdown(
     pg_pool: Any,
 ) -> None:
     _LOG.info("cryptozavr shutting down")
+    # Cancel active watches first so their per-watch tasks don't fight WS close.
+    for _state in watch_registry.values():
+        _task = _state._task
+        if _task is not None and not _task.done():
+            _task.cancel()
+    if watch_registry:
+        await asyncio.gather(
+            *(s._task for s in watch_registry.values() if s._task is not None),
+            return_exceptions=True,
+        )
+    try:
+        await ws_provider.close()
+    except Exception:
+        _LOG.exception("ws_provider close failed")
     for stopper, label in (
         (cache_invalidator.stop, "cache invalidator"),
         (ticker_sync_worker.stop, "ticker sync worker"),
