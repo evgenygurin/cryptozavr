@@ -34,7 +34,7 @@
 ## Tests
 
 ```bash
-uv run pytest tests/unit tests/contract -m "not integration" -q   # 288 unit + 5 contract (~3s)
+uv run pytest tests/unit tests/contract -m "not integration" -q   # 440 unit + contract (~4s)
 uv run pytest tests/integration -v                                # 14 live tests vs cloud Supabase (~40s, needs .env)
 ```
 
@@ -111,10 +111,10 @@ Full CLI cheatsheet — `docs/plugin-cli-reference.md`. Там:
 ## Architecture TL;DR
 
 - **L3 Domain**: `src/cryptozavr/domain/` — frozen dataclasses (Ticker, OHLCVSeries, OrderBookSnapshot, TradeTick)
-- **L2 Infra**: `src/cryptozavr/infrastructure/` — CCXT adapter, CoinGecko HTTP, Supabase gateway, 4 decorators (Retry/RateLimit/Cache/Logging), 5-handler Chain of Responsibility, Realtime subscriber
-- **L4 Application**: `src/cryptozavr/application/services/` — TickerService, OhlcvService, OrderBookService, TradesService
-- **L5 MCP**: `src/cryptozavr/mcp/` — FastMCP v3 server with lifespan, 4 tools, DTO layer
+- **L2 Infra**: `src/cryptozavr/infrastructure/` — CCXT adapter (with `trades_to_domain` + `_snap_order_book_depth`), CoinGecko HTTP (with `id→category_id` mapping), Supabase gateway, **5 decorators** (Retry/RateLimit/Cache/Logging/**Metrics**), 5-handler Chain of Responsibility, Realtime subscriber, `MetricsRegistry` (Prometheus-compatible).
+- **L4 Application**: `src/cryptozavr/application/services/` — TickerService, OhlcvService, OrderBookService, TradesService, AnalyticsService (Strategy), SymbolResolver, DiscoveryService, plus Phase 1.5 background tasks: `HealthMonitor` (probes venues, updates VenueState.last_checked_at_ms), `TickerSyncWorker` (force-refreshes subscribed symbols), `CacheInvalidator` (Supabase Realtime → `provider.invalidate_tickers()`).
+- **L5 MCP**: `src/cryptozavr/mcp/` — FastMCP v3 server with dict-lifespan, **16 tools** (5 market-data, 1 discovery, 4 analytics, 1 history, 5 catalog with `structuredContent`), **4 resources + 1 URI-template**, **2 prompts**, DTO layer with `VenuesListDTO`/`SymbolsListDTO`/etc.
 
-14 GoF patterns: Template Method, Adapter, Bridge, Decorator (×4), Chain of Responsibility (×5 handlers), State (VenueState), Factory Method, Singleton via DI, Flyweight (SymbolRegistry), Facade (SupabaseGateway).
+**15 GoF patterns** applied: Template Method, Adapter, Bridge, **Decorator (×5, incl. MetricsDecorator)**, Chain of Responsibility (×5 handlers), State (VenueState), Factory Method, Singleton via DI, Flyweight (SymbolRegistry), Facade (SupabaseGateway), Iterator (OHLCVPaginator with `_clip_to_window`), Strategy (MarketAnalyzer), **Observer** (Supabase Realtime → `CacheInvalidator`).
 
 Полная спецификация — `docs/superpowers/specs/2026-04-21-cryptozavr-mvp-design.md`.
