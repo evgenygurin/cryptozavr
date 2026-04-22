@@ -30,6 +30,7 @@ from cryptozavr.mcp.tools.discovery import register_resolve_symbol_tool
 from cryptozavr.mcp.tools.history import register_fetch_ohlcv_history_tool
 from cryptozavr.mcp.tools.ohlcv import register_ohlcv_tool
 from cryptozavr.mcp.tools.order_book import register_order_book_tool
+from cryptozavr.mcp.tools.paper import register_paper_tools
 from cryptozavr.mcp.tools.risk_tools import register_risk_tools
 from cryptozavr.mcp.tools.strategy_compute import register_strategy_compute_tools
 from cryptozavr.mcp.tools.strategy_read_only import register_strategy_read_only_tools
@@ -99,6 +100,7 @@ def build_server(settings: Settings) -> FastMCP:
     register_strategy_compute_tools(mcp)
     register_risk_tools(mcp)
     register_watch_tools(mcp)
+    register_paper_tools(mcp, bankroll_initial=settings.paper_bankroll_initial)
     register_prompts(mcp)
     register_resources(mcp)
     register_venue_health_resource(mcp)
