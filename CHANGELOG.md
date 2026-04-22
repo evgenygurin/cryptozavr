@@ -23,11 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` all bumped
   to `0.3.0` to match the git tag and CHANGELOG. Tests now read
   `cryptozavr.__version__` instead of hard-coding the literal.
+- **`cryptozavr://categories` resource fixed**: `CoinGeckoAdapter.categories_to_list`
+  now copies `id` into `category_id` so `CategoryDTO.from_provider` stops raising
+  `KeyError` against the current `/coins/categories` response shape. Previously
+  surfaced as a generic "Error reading resource" (`mask_error_details=True`).
 
 ### Tests
-- +12 unit tests: `trades_to_domain` (4), provider trades happy-path +
-  unknown-side (2), order-book depth snap parametrised over 6 inputs.
-- Unit + contract total: **435 passing** (was 423).
+- +14 unit tests: `trades_to_domain` (4), provider trades happy-path +
+  unknown-side (2), order-book depth snap parametrised over 6 inputs,
+  CoinGecko categories id→category_id mapping + legacy preservation (2).
+- Unit + contract total: **437 passing** (was 423).
 
 ## [0.3.0] - 2026-04-22 — **Phase 1.5: Realtime + Observability**
 
