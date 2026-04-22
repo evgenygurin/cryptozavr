@@ -14,6 +14,7 @@ from cryptozavr.domain.market_data import (
     OHLCVSeries,
     OrderBookSnapshot,
     Ticker,
+    TradeTick,
 )
 from cryptozavr.domain.symbols import Symbol
 from cryptozavr.domain.value_objects import Instant, Timeframe
@@ -21,6 +22,9 @@ from cryptozavr.domain.venues import VenueId
 from cryptozavr.infrastructure.providers.adapters.ccxt_adapter import CCXTAdapter
 from cryptozavr.infrastructure.providers.base import BaseProvider
 from cryptozavr.infrastructure.providers.state.venue_state import VenueState
+
+_KUCOIN_SHALLOW_DEPTH = 20
+_KUCOIN_DEEP_DEPTH = 100
 
 
 class _ExchangeProtocol(Protocol):
@@ -36,6 +40,12 @@ class _ExchangeProtocol(Protocol):
         limit: int = ...,
     ) -> Any: ...
     async def fetch_order_book(self, symbol: str, limit: int = ...) -> Any: ...
+    async def fetch_trades(
+        self,
+        symbol: str,
+        since: int | None = ...,
+        limit: int = ...,
+    ) -> Any: ...
     async def close(self) -> Any: ...
 
 
@@ -102,10 +112,22 @@ class CCXTProvider(BaseProvider):
         return CCXTAdapter.ohlcv_to_series(raw, symbol, timeframe)
 
     async def _fetch_order_book_raw(self, symbol: Symbol, depth: int) -> Any:
+        safe_depth = self._snap_order_book_depth(depth)
         return await self._exchange.fetch_order_book(
             symbol.native_symbol,
-            limit=depth,
+            limit=safe_depth,
         )
+
+    def _snap_order_book_depth(self, depth: int) -> int:
+        """Map requested depth to a venue-allowed limit.
+
+        KuCoin spot accepts only `limit ∈ {20, 100}`; everything else triggers
+        a CCXT validation error. We snap to 20 for small requests and 100 for
+        anything larger. Other venues pass the value through unchanged.
+        """
+        if self.venue_id == VenueId.KUCOIN:
+            return _KUCOIN_SHALLOW_DEPTH if depth <= _KUCOIN_SHALLOW_DEPTH else _KUCOIN_DEEP_DEPTH
+        return depth
 
     def _normalize_order_book(
         self,
@@ -113,6 +135,25 @@ class CCXTProvider(BaseProvider):
         symbol: Symbol,
     ) -> OrderBookSnapshot:
         return CCXTAdapter.orderbook_to_domain(raw, symbol)
+
+    async def _fetch_trades_raw(
+        self,
+        symbol: Symbol,
+        since: Instant | None,
+        limit: int,
+    ) -> Any:
+        return await self._exchange.fetch_trades(
+            symbol.native_symbol,
+            since=since.to_ms() if since else None,
+            limit=limit,
+        )
+
+    def _normalize_trades(
+        self,
+        raw: Any,
+        symbol: Symbol,
+    ) -> tuple[TradeTick, ...]:
+        return CCXTAdapter.trades_to_domain(raw, symbol)
 
     def _translate_exception(self, exc: Exception) -> Exception:
         if isinstance(exc, ccxt_async.RateLimitExceeded):
