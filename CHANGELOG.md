@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-22 — **Phase 1.5 verification follow-up**
+
+Full semantic-invariant sweep of the v0.3.0 surface surfaced 19 issues
+across the review-toolkit agents (code / tests / comments / silent-
+failures / type-design). All 6 Critical + 8 Important + 5 Suggestion +
+17 coverage gaps addressed; PR #1 merged into main.
+
 ### Fixed — Phase 1.5 follow-up
 
 - **`get_trades` now works end-to-end**: `CCXTProvider` overrides
