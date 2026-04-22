@@ -29,4 +29,7 @@ MCP resources:
 
 Venues seeded: kucoin, coingecko
 Tools: echo, get_ticker, get_ohlcv, get_order_book, get_trades, resolve_symbol.
+
+Venue health: query resource cryptozavr://venue_health
+  (state: healthy|degraded|down, last_checked_ms per venue — run /cryptozavr:health once MCP is up).
 EOF
