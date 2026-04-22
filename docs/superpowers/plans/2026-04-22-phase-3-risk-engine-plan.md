@@ -22,7 +22,7 @@ Three units + closure. Each unit = one subagent dispatch + one light review (IRO
 
 **Budget:** 1 subagent + 1 light review.
 
-- [ ] Unit 3-1 done
+- [x] Unit 3-1 done (9a9cda4, light review APPROVED)
 
 ## Unit 3-2 — RiskEngine + 5 handlers + KillSwitch
 
@@ -46,7 +46,7 @@ Three units + closure. Each unit = one subagent dispatch + one light review (IRO
 
 **Budget:** 1 subagent + 1 light review.
 
-- [ ] Unit 3-2 done
+- [x] Unit 3-2 done (16d5b2a, light review APPROVED)
 
 ## Unit 3-3 — Persistence + MCP surface
 
@@ -74,7 +74,7 @@ Three units + closure. Each unit = one subagent dispatch + one light review (IRO
 
 **Budget:** 1 subagent + 1 light review.
 
-- [ ] Unit 3-3 done
+- [x] Unit 3-3 done (f40b89a, light review APPROVED)
 
 ## Phase 3 closure — heavy review + PR + merge
 
