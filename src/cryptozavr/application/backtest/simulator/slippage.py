@@ -27,6 +27,8 @@ class SlippageModel(Protocol):
 
 class PctSlippageModel:
     def __init__(self, *, bps: int = 10) -> None:
+        """bps default 10 = 0.1% each side; conservative for crypto spot
+        taker fills. Raises ValueError for negative bps."""
         if bps < 0:
             raise ValueError(f"bps must be >= 0 (got {bps!r})")
         self._rate = Decimal(bps) / _BPS_PER_UNIT

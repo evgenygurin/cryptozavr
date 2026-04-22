@@ -14,6 +14,8 @@ class FeeModel(Protocol):
 
 class FixedBpsFeeModel:
     def __init__(self, *, bps: int = 5) -> None:
+        """bps default 5 = 0.05%; conservative spot-taker rate across
+        major crypto venues. Raises ValueError for negative bps."""
         if bps < 0:
             raise ValueError(f"bps must be >= 0 (got {bps!r})")
         self._rate = Decimal(bps) / _BPS_PER_UNIT

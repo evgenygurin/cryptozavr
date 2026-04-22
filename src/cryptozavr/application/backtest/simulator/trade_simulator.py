@@ -39,7 +39,7 @@ _LOG = logging.getLogger(__name__)
 _DUST_QUANTUM = Decimal("1E-10")
 
 
-def _d(v: float) -> Decimal:
+def to_decimal(v: float) -> Decimal:
     """Float -> Decimal via str() to avoid binary float artifacts."""
     return Decimal(str(v))
 
@@ -49,7 +49,7 @@ def _is_dust(size: Decimal) -> bool:
     return size.quantize(_DUST_QUANTUM, rounding=ROUND_DOWN) == 0
 
 
-def _instant_for_bar(bar_index: int) -> Instant:
+def instant_for_bar(bar_index: int) -> Instant:
     """Monotonic placeholder Instants; engine facade overrides with real
     timestamps from the candle DataFrame when it has them."""
     return Instant.from_ms(1_700_000_000_000 + bar_index * 60_000)
@@ -90,7 +90,7 @@ class TradeSimulator:
 
     def tick(self, candle: pd.Series, signal: SignalTick) -> None:
         bar_index = signal.bar_index
-        close_price = _d(candle["close"])
+        close_price = to_decimal(candle["close"])
         if self._position is None and signal.entry_signal is True:
             self._open_position(candle, bar_index)
         elif self._position is not None:
@@ -101,10 +101,19 @@ class TradeSimulator:
             mark_equity = self._mark_to_market(close_price)
         self._equity_curve.append(
             EquityPoint(
-                observed_at=_instant_for_bar(bar_index),
+                observed_at=instant_for_bar(bar_index),
                 equity=mark_equity,
             )
         )
+
+    def replace_last_equity_point(self, equity: Decimal) -> None:
+        """Replace the last EquityPoint with a new one carrying `equity`.
+        Engine uses this to reflect post-auto-close equity at series end.
+        Timestamp is preserved from the original last point."""
+        if not self._equity_curve:
+            return
+        last = self._equity_curve[-1]
+        self._equity_curve[-1] = EquityPoint(observed_at=last.observed_at, equity=equity)
 
     def close_open_position(self, close_price: Decimal, bar_index: int) -> None:
         """Used by the engine to flush a still-open position at series end."""
@@ -114,7 +123,7 @@ class TradeSimulator:
 
     def _open_position(self, candle: pd.Series, bar_index: int) -> None:
         side = self.spec.entry.side
-        close_price = _d(candle["close"])
+        close_price = to_decimal(candle["close"])
         fill = self.slippage.adjust(reference=close_price, side=side, is_entry=True)
         if fill <= 0:
             _LOG.warning(
@@ -168,14 +177,14 @@ class TradeSimulator:
             take_profit_level=tp,
             stop_loss_level=sl,
         )
-        self._entry_opened_at_ms = _instant_for_bar(bar_index).to_ms()
+        self._entry_opened_at_ms = instant_for_bar(bar_index).to_ms()
 
     def _maybe_close_intrabar_or_on_signal(self, candle: pd.Series, signal: SignalTick) -> None:
         assert self._position is not None
         pos = self._position
-        bar_high = _d(candle["high"])
-        bar_low = _d(candle["low"])
-        bar_close = _d(candle["close"])
+        bar_high = to_decimal(candle["high"])
+        bar_low = to_decimal(candle["low"])
+        bar_close = to_decimal(candle["close"])
         bar_index = signal.bar_index
 
         tp = pos.take_profit_level
@@ -237,7 +246,7 @@ class TradeSimulator:
         self._trades.append(
             BacktestTrade(
                 opened_at=Instant.from_ms(self._entry_opened_at_ms),
-                closed_at=_instant_for_bar(bar_index),
+                closed_at=instant_for_bar(bar_index),
                 side=side_enum,
                 entry_price=pos.entry_price,
                 exit_price=exit_price,

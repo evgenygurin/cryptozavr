@@ -12,7 +12,6 @@ import pandas as pd
 
 from cryptozavr.application.analytics.backtest_report import (
     BacktestReport,
-    EquityPoint,
 )
 from cryptozavr.application.backtest.evaluator.strategy_evaluator import (
     StrategyEvaluator,
@@ -28,8 +27,8 @@ from cryptozavr.application.backtest.simulator.slippage import (
 )
 from cryptozavr.application.backtest.simulator.trade_simulator import (
     TradeSimulator,
-    _d,
-    _instant_for_bar,
+    instant_for_bar,
+    to_decimal,
 )
 from cryptozavr.application.strategy.strategy_spec import StrategySpec
 from cryptozavr.domain.exceptions import ValidationError
@@ -69,19 +68,12 @@ class BacktestEngine:
         # Auto-close if still open at the end.
         if simulator.open_position is not None:
             simulator.close_open_position(
-                close_price=_d(candles.iloc[-1]["close"]),
+                close_price=to_decimal(candles.iloc[-1]["close"]),
                 bar_index=len(candles) - 1,
             )
-            # Replace last equity point with updated equity post-close.
-            old_curve = list(simulator.equity_curve)
-            old_curve[-1] = EquityPoint(
-                observed_at=_instant_for_bar(len(candles) - 1),
-                equity=simulator.equity,
-            )
-            # Rebuild tuple
-            simulator._equity_curve = old_curve
-        start = _instant_for_bar(0)
-        end = _instant_for_bar(len(candles) - 1)
+            simulator.replace_last_equity_point(simulator.equity)
+        start = instant_for_bar(0)
+        end = instant_for_bar(len(candles) - 1)
         return BacktestReport(
             strategy_name=spec.name,
             period=TimeRange(start=start, end=end),
