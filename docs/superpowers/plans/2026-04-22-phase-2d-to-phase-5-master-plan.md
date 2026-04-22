@@ -120,7 +120,7 @@ brainstorming — scope уже зафиксирован в MVP spec §11.3.
 
 **Dispatch:** 1 subagent (small) + no review (markdown).
 
-- [ ] Unit skill-1 done
+- [x] Unit skill-1 done (direct write, skill at skills/strategy-review/SKILL.md)
 
 ### Phase 2 closure — heavy review + PR + user merge
 
