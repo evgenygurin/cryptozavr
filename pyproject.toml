@@ -1,6 +1,6 @@
 [project]
 name = "cryptozavr"
-version = "0.3.4"
+version = "0.3.5"
 description = "Risk-first crypto market research plugin for Claude Code"
 readme = "README.md"
 license = { text = "MIT" }

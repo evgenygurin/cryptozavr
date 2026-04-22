@@ -11,10 +11,11 @@ class TestPgPoolConfig:
     def test_defaults(self) -> None:
         cfg = PgPoolConfig(dsn="postgresql://user:pw@host:5432/db")
         assert cfg.dsn == "postgresql://user:pw@host:5432/db"
-        assert cfg.min_size == 1
-        assert cfg.max_size == 10
+        assert cfg.min_size == 2
+        assert cfg.max_size == 25
         assert cfg.max_inactive_connection_lifetime == 60.0
-        assert cfg.command_timeout == 30.0
+        assert cfg.command_timeout == 15.0
+        assert cfg.acquire_timeout == 2.0
 
     def test_custom(self) -> None:
         cfg = PgPoolConfig(
