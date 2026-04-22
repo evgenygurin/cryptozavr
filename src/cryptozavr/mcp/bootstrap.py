@@ -84,8 +84,8 @@ async def _build_background_services(
     ):
         try:
             await starter()
-        except Exception as exc:
-            _LOG.warning("%s failed to start: %s", label, exc)
+        except Exception:
+            _LOG.exception("%s failed to start", label)
     return health_monitor, ticker_sync_worker, cache_invalidator
 
 
@@ -255,13 +255,13 @@ async def _shutdown(
     ):
         try:
             await stopper()
-        except Exception as exc:
-            _LOG.warning("%s stop failed: %s", label, exc)
+        except Exception:
+            _LOG.exception("%s stop failed", label)
     for venue_id, provider in providers.items():
         try:
             await provider.close()
-        except Exception as exc:
-            _LOG.warning("provider %s close failed: %s", venue_id, exc)
+        except Exception:
+            _LOG.exception("provider %s close failed", venue_id)
     for closer, label in (
         (subscriber.close, "realtime subscriber"),
         (http_registry.close_all, "http registry"),
@@ -270,5 +270,5 @@ async def _shutdown(
     ):
         try:
             await closer()
-        except Exception as exc:
-            _LOG.warning("%s close failed: %s", label, exc)
+        except Exception:
+            _LOG.exception("%s close failed", label)

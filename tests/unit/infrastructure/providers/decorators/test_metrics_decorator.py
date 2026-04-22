@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import Any
 
 import pytest
@@ -119,6 +120,29 @@ async def test_histogram_duration_recorded() -> None:
     assert entry["labels"] == {"venue": "kucoin", "endpoint": "fetch_ticker"}
     assert entry["count"] == 1
     assert entry["sum"] >= 0.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "endpoint",
+    ["load_markets", "fetch_ticker", "fetch_ohlcv", "fetch_order_book", "fetch_trades"],
+)
+async def test_each_endpoint_label_emitted(endpoint: str) -> None:
+    """Every decorated method must label its metric with the correct endpoint."""
+    reg = MetricsRegistry()
+    provider = _StubProvider()
+    dec = MetricsDecorator(provider, registry=reg)  # type: ignore[arg-type]
+
+    method = getattr(dec, endpoint)
+
+    if endpoint == "fetch_ticker":
+        await method("BTC/USDT")
+    else:
+        with contextlib.suppress(NotImplementedError):
+            await method()
+
+    labelled = [c for c in reg.snapshot()["counters"] if c["labels"].get("endpoint") == endpoint]
+    assert labelled, f"no counter labelled with endpoint={endpoint!r}"
 
 
 @pytest.mark.asyncio

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from cryptozavr.infrastructure.observability.metrics import MetricsRegistry
 
 
@@ -47,6 +49,16 @@ def test_histogram_zero_observations_absent() -> None:
     reg = MetricsRegistry()
     snap = reg.snapshot()
     assert snap["histograms"] == []
+
+
+def test_rejects_unsorted_buckets() -> None:
+    with pytest.raises(ValueError, match="sorted ascending"):
+        MetricsRegistry(buckets=(100.0, 50.0, float("inf")))
+
+
+def test_rejects_missing_inf_bucket() -> None:
+    with pytest.raises(ValueError, match="must be \\+inf"):
+        MetricsRegistry(buckets=(50.0, 100.0, 500.0))
 
 
 def test_snapshot_reflects_live_state() -> None:

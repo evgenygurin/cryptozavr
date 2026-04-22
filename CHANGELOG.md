@@ -55,7 +55,60 @@ are the clean-render alternative for interactive views.
 - +14 unit tests: `trades_to_domain` (4), provider trades happy-path +
   unknown-side (2), order-book depth snap parametrised over 6 inputs,
   CoinGecko categories id→category_id mapping + legacy preservation (2).
-- Unit + contract total: **447 passing** (was 423).
+- Unit + contract total: **473 passing** (was 423).
+
+### Review-driven hardening — Important + Suggestion items
+
+**Semantic correctness**
+- `HealthMonitor.mark_probe_performed()` now fires **after** the probe
+  completes, not before — a hung probe can no longer masquerade as
+  "just checked" in `cryptozavr://venue_health`.
+- `TickerSyncWorker.sync_once` fan-out moved from serial-per-subscription
+  to `asyncio.gather(..., return_exceptions=True)`. `CancelledError`
+  is re-raised; other exceptions are logged with `exc_info`.
+- `VenueState.mark_probe_performed` is now monotonic — an older
+  timestamp cannot regress the observable last-seen time.
+
+**Type invariants**
+- `_HistogramStats` rejects unsorted buckets or missing `+inf` at the
+  top; `MetricsRegistry.__init__` validates up-front.
+- `TickerSubscription.channel_id` is validated against
+  `TickerSubscription.make_channel_id(venue_id, symbol)` in `__post_init__`
+  so arbitrary channel strings can no longer leak the abstraction.
+- `SymbolsListDTO` / `TrendingListDTO` / `CategoriesListDTO` added a
+  `success-xor-error` model validator — non-empty list + non-null
+  `error` is no longer representable.
+- `VenueHealthDTO.venues` now enforces venue uniqueness via
+  `@model_validator`.
+- `CategoryDTO.from_provider` falls back safely to `category_id` or
+  `"unknown"` when `name` is absent.
+
+**Silent-failure reduction**
+- `except Exception` branches in `bootstrap._start_background_services`,
+  `_shutdown`, `HealthMonitor._run_probe`, and
+  `cryptozavr://trending` / `cryptozavr://categories` resources now use
+  `logger.exception` for full stack traces, and sanitise exception
+  detail leakage (`str(exc)` → `f"{type(exc).__name__}: upstream unavailable"`).
+
+**Docs**
+- README.md slash-command list aligned to actual 8 commands.
+- `cryptozavr://trending` description clarifies `rank` is a synthetic
+  0-indexed position in the CoinGecko response, not a trading rank.
+
+**Tests added for previously-untested invariants**
+- `test_mark_probe_performed_fires_after_probe_completes`
+- `test_sync_once_runs_subscriptions_concurrently` +
+  `test_sync_once_propagates_cancellation`
+- `test_run_forever_survives_iteration_exception`
+- `test_mark_probe_performed_is_monotonic`
+- `test_rejects_unsorted_buckets` + `test_rejects_missing_inf_bucket`
+- `test_fetch_trades_forwards_since_as_ms`
+- `test_on_ticker_change_extracts_venue_from_record_venue_alias` +
+  `test_on_ticker_change_extracts_venue_from_data_key` +
+  `test_on_ticker_change_extracts_top_level_venue_id`
+- `test_no_clip_code_when_chunk_already_fits`
+- `test_each_endpoint_label_emitted` (parametrised × 5 endpoints)
+- `TestListDTOValidators` (6 tests covering DTO XOR-validators)
 
 ## [0.3.0] - 2026-04-22 — **Phase 1.5: Realtime + Observability**
 

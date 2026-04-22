@@ -184,6 +184,27 @@ class TestOHLCVPaginator:
         service.fetch_ohlcv.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_no_clip_code_when_chunk_already_fits(self) -> None:
+        """The `paginator:clipped_to_window` marker must NOT appear if nothing was clipped."""
+        since_ms = _START
+        until_ms = _START + _TF_MS * 5
+        candles = tuple(_candle(_START + i * _TF_MS) for i in range(5))
+        service = MagicMock(spec=OhlcvService)
+        service.fetch_ohlcv = AsyncMock(return_value=_result(candles, ["cache:miss"]))
+        paginator = OHLCVPaginator(
+            service=service,
+            venue="kucoin",
+            symbol="BTC-USDT",
+            timeframe=Timeframe.H1,
+            since_ms=since_ms,
+            until_ms=until_ms,
+            chunk_size=10,
+        )
+        chunks = [chunk async for chunk in paginator]
+        assert len(chunks) == 1
+        assert "paginator:clipped_to_window" not in chunks[0].reason_codes
+
+    @pytest.mark.asyncio
     async def test_clips_candles_outside_window(self) -> None:
         """Provider may return candles beyond until_ms — paginator trims them."""
         since_ms = _START

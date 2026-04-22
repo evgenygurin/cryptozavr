@@ -102,8 +102,8 @@ def register_catalog_tools(mcp: FastMCP) -> None:
         try:
             assets = await discovery.list_trending()
         except Exception as exc:
-            await ctx.warning(f"coingecko trending failed: {exc}")
-            return TrendingListDTO(assets=[], error=str(exc))
+            await ctx.warning(f"coingecko trending failed: {type(exc).__name__}")
+            return TrendingListDTO(assets=[], error=f"{type(exc).__name__}: upstream unavailable")
         return TrendingListDTO(
             assets=[TrendingAssetDTO.from_domain(a, rank=i) for i, a in enumerate(assets)],
         )
@@ -122,8 +122,10 @@ def register_catalog_tools(mcp: FastMCP) -> None:
         try:
             raw = await discovery.list_categories()
         except Exception as exc:
-            await ctx.warning(f"coingecko categories failed: {exc}")
-            return CategoriesListDTO(categories=[], error=str(exc))
+            await ctx.warning(f"coingecko categories failed: {type(exc).__name__}")
+            return CategoriesListDTO(
+                categories=[], error=f"{type(exc).__name__}: upstream unavailable"
+            )
         return CategoriesListDTO(
             categories=[CategoryDTO.from_provider(c) for c in raw],
         )

@@ -36,11 +36,27 @@ class SubscriptionHandle:
 
 @dataclass(frozen=True, slots=True)
 class TickerSubscription:
-    """Per-symbol ticker subscription record exposed via `subscriptions()`."""
+    """Per-symbol ticker subscription record exposed via `subscriptions()`.
+
+    `channel_id` is derived from `(venue_id, symbol)` via `make_channel_id()`;
+    callers should not pass an arbitrary string. The pattern is the single
+    source of truth for routing realtime payloads back to providers.
+    """
 
     venue_id: str
     symbol: str
     channel_id: str
+
+    @staticmethod
+    def make_channel_id(venue_id: str, symbol: str) -> str:
+        return f"cryptozavr-ticker-{venue_id}-{symbol}"
+
+    def __post_init__(self) -> None:
+        expected = self.make_channel_id(self.venue_id, self.symbol)
+        if self.channel_id != expected:
+            raise ValueError(
+                f"TickerSubscription.channel_id must be {expected!r}, got {self.channel_id!r}"
+            )
 
 
 class RealtimeSubscriber:

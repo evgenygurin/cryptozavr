@@ -24,6 +24,7 @@ from cryptozavr.domain.venues import MarketType, VenueId
 from cryptozavr.mcp.dtos import (
     AnalysisReportDTO,
     AnalysisResultDTO,
+    CategoriesListDTO,
     CategoryDTO,
     OHLCVCandleDTO,
     OHLCVHistoryDTO,
@@ -31,10 +32,14 @@ from cryptozavr.mcp.dtos import (
     OrderBookDTO,
     PriceSizeDTO,
     SymbolDTO,
+    SymbolsListDTO,
     TickerDTO,
     TradesDTO,
     TradeTickDTO,
     TrendingAssetDTO,
+    TrendingListDTO,
+    VenueHealthDTO,
+    VenueHealthEntryDTO,
 )
 
 
@@ -569,3 +574,64 @@ class TestAnalysisReportDTO:
         assert dto.results[0].strategy == "vwap"
         assert dto.results[1].strategy == "volatility_regime"
         assert dto.reason_codes == ["provider:called"]
+
+
+class TestListDTOValidators:
+    def test_symbols_list_rejects_error_with_non_empty_symbols(self) -> None:
+        with pytest.raises(ValueError, match="nonsense state"):
+            SymbolsListDTO(
+                venue="kucoin",
+                symbols=[
+                    SymbolDTO(
+                        venue="kucoin",
+                        base="BTC",
+                        quote="USDT",
+                        native_symbol="BTC-USDT",
+                        market_type="spot",
+                    )
+                ],
+                error="upstream down",
+            )
+
+    def test_trending_list_rejects_error_with_non_empty_assets(self) -> None:
+        with pytest.raises(ValueError, match="nonsense state"):
+            TrendingListDTO(
+                assets=[
+                    TrendingAssetDTO(
+                        code="BTC",
+                        name="Bitcoin",
+                        coingecko_id="bitcoin",
+                        market_cap_rank=1,
+                        categories=[],
+                        rank=0,
+                    )
+                ],
+                error="upstream down",
+            )
+
+    def test_categories_list_rejects_error_with_non_empty_categories(self) -> None:
+        with pytest.raises(ValueError, match="nonsense state"):
+            CategoriesListDTO(
+                categories=[CategoryDTO(id="layer-1", name="L1")],
+                error="upstream down",
+            )
+
+    def test_success_with_empty_list_is_valid(self) -> None:
+        """Empty list + no error is a legal 'success but nothing to report'."""
+        dto = TrendingListDTO(assets=[], error=None)
+        assert dto.assets == []
+        assert dto.error is None
+
+    def test_error_with_empty_list_is_valid(self) -> None:
+        """Empty list + error is the degraded-provider shape."""
+        dto = CategoriesListDTO(categories=[], error="coingecko 429")
+        assert dto.error == "coingecko 429"
+
+    def test_venue_health_rejects_duplicate_venues(self) -> None:
+        with pytest.raises(ValueError, match="duplicate"):
+            VenueHealthDTO(
+                venues=[
+                    VenueHealthEntryDTO(venue="kucoin", state="healthy"),
+                    VenueHealthEntryDTO(venue="kucoin", state="down"),
+                ]
+            )

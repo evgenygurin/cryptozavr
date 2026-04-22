@@ -79,6 +79,39 @@ def test_on_ticker_change_pessimistic_when_venue_missing() -> None:
     assert coingecko.invalidations == 1
 
 
+def test_on_ticker_change_extracts_venue_from_record_venue_alias() -> None:
+    """`record.venue` is one of 4 fallback extraction paths."""
+    provider = _FakeCacheProvider()
+    invalidator = CacheInvalidator(
+        subscriber=_make_subscriber(),
+        providers={VenueId.KUCOIN: provider},
+    )
+    invalidator.on_ticker_change({"record": {"venue": "kucoin"}})
+    assert provider.invalidations == 1
+
+
+def test_on_ticker_change_extracts_venue_from_data_key() -> None:
+    """`data.venue_id` is another fallback path (supabase-py variations)."""
+    provider = _FakeCacheProvider()
+    invalidator = CacheInvalidator(
+        subscriber=_make_subscriber(),
+        providers={VenueId.KUCOIN: provider},
+    )
+    invalidator.on_ticker_change({"data": {"venue_id": "kucoin"}})
+    assert provider.invalidations == 1
+
+
+def test_on_ticker_change_extracts_top_level_venue_id() -> None:
+    """Top-level `venue_id` is the last fallback path."""
+    provider = _FakeCacheProvider()
+    invalidator = CacheInvalidator(
+        subscriber=_make_subscriber(),
+        providers={VenueId.KUCOIN: provider},
+    )
+    invalidator.on_ticker_change({"venue_id": "kucoin"})
+    assert provider.invalidations == 1
+
+
 def test_on_ticker_change_ignores_non_dict_payload() -> None:
     provider = _FakeCacheProvider()
     invalidator = CacheInvalidator(

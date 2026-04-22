@@ -48,8 +48,14 @@ class VenueState:
         return self._last_checked_at_ms
 
     def mark_probe_performed(self, now_ms: int) -> None:
-        """Record that a health probe was just executed (sets last_checked_at_ms)."""
-        self._last_checked_at_ms = now_ms
+        """Record that a health probe was just executed (sets last_checked_at_ms).
+
+        Monotonic: a later call with an older timestamp is clamped to the
+        existing value so drifting clocks or out-of-order probes cannot
+        regress the observable last-seen time in `venue_health`.
+        """
+        if self._last_checked_at_ms is None or now_ms > self._last_checked_at_ms:
+            self._last_checked_at_ms = now_ms
 
     def require_operational(self) -> None:
         self._handler.check_operational()

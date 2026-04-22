@@ -15,7 +15,7 @@ from cryptozavr.domain.exceptions import (
 )
 from cryptozavr.domain.market_data import TradeSide
 from cryptozavr.domain.symbols import SymbolRegistry
-from cryptozavr.domain.value_objects import Timeframe
+from cryptozavr.domain.value_objects import Instant, Timeframe
 from cryptozavr.domain.venues import MarketType, VenueId
 from cryptozavr.infrastructure.providers.ccxt_provider import CCXTProvider
 from cryptozavr.infrastructure.providers.state.venue_state import VenueState
@@ -266,6 +266,29 @@ async def test_fetch_trades_happy_path(btc_symbol) -> None:
     assert trades[0].size == Decimal("0.01")
     assert trades[0].trade_id == "t1"
     assert fake.last_trades_args == ("BTC-USDT", None, 5)
+
+
+@pytest.mark.asyncio
+async def test_fetch_trades_forwards_since_as_ms(btc_symbol) -> None:
+    """`since: Instant` must be converted to int ms before hitting CCXT."""
+
+    raw = [
+        {
+            "id": "t1",
+            "timestamp": 1_700_000_000_000,
+            "side": "buy",
+            "price": 1.0,
+            "amount": 1.0,
+        }
+    ]
+    fake = _FakeExchange(trades=raw)
+    provider = CCXTProvider(
+        venue_id=VenueId.KUCOIN,
+        state=VenueState(VenueId.KUCOIN),
+        exchange=fake,
+    )
+    await provider.fetch_trades(btc_symbol, since=Instant.from_ms(1_699_900_000_000), limit=5)
+    assert fake.last_trades_args == ("BTC-USDT", 1_699_900_000_000, 5)
 
 
 @pytest.mark.asyncio

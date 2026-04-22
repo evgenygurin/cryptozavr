@@ -8,6 +8,7 @@ see `text/plain` despite the decorator kwarg. See FastMCP docs
 """
 
 import json
+import logging
 
 from fastmcp import FastMCP
 from fastmcp.dependencies import Depends
@@ -18,6 +19,8 @@ from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.venues import VenueId
 from cryptozavr.mcp.dtos import CategoryDTO, TrendingAssetDTO
 from cryptozavr.mcp.lifespan_state import get_discovery_service, get_registry
+
+_LOG = logging.getLogger(__name__)
 
 _REGISTRY: SymbolRegistry = Depends(get_registry)
 _DISCOVERY: DiscoveryService = Depends(get_discovery_service)
@@ -89,7 +92,9 @@ def register_resources(mcp: FastMCP) -> None:
         "cryptozavr://trending",
         name="Trending Assets",
         description=(
-            "Currently trending crypto assets (CoinGecko). Ordered by trending rank (0-indexed)."
+            "Currently trending crypto assets from CoinGecko. "
+            "`rank` is the synthetic 0-indexed position within the provider response, "
+            "not a market-cap or trading-volume rank."
         ),
         mime_type=_JSON_MIME,
         tags={"catalog", "discovery"},
@@ -101,7 +106,10 @@ def register_resources(mcp: FastMCP) -> None:
         try:
             assets = await discovery.list_trending()
         except Exception as exc:
-            return _json_resource({"assets": [], "error": str(exc)})
+            _LOG.exception("cryptozavr://trending upstream failed")
+            return _json_resource(
+                {"assets": [], "error": f"{type(exc).__name__}: upstream unavailable"}
+            )
         return _json_resource(
             {
                 "assets": [
@@ -127,7 +135,13 @@ def register_resources(mcp: FastMCP) -> None:
         try:
             raw = await discovery.list_categories()
         except Exception as exc:
-            return _json_resource({"categories": [], "error": str(exc)})
+            _LOG.exception("cryptozavr://categories upstream failed")
+            return _json_resource(
+                {
+                    "categories": [],
+                    "error": f"{type(exc).__name__}: upstream unavailable",
+                }
+            )
         return _json_resource(
             {
                 "categories": [CategoryDTO.from_provider(c).model_dump(mode="json") for c in raw],

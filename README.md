@@ -33,7 +33,7 @@ Risk-first crypto market research plugin for Claude Code, OpenAI Codex, OpenCode
 - `risk_check(venue, symbol)` — data-quality pre-decision check
 
 **Slash commands (8)**
-- `/cryptozavr:ticker`, `/cryptozavr:ohlcv`, `/cryptozavr:order_book` (via research), `/cryptozavr:trades` (via research), `/cryptozavr:research`, `/cryptozavr:resolve`, `/cryptozavr:trending`, `/cryptozavr:analyze`, `/cryptozavr:history`, `/cryptozavr:health`
+- `/cryptozavr:ticker`, `/cryptozavr:ohlcv`, `/cryptozavr:research`, `/cryptozavr:resolve`, `/cryptozavr:trending`, `/cryptozavr:analyze`, `/cryptozavr:history`, `/cryptozavr:health`
 
 **Subagent**
 - `crypto-researcher` — multi-step market research specialist (calm, explainable, no advice)

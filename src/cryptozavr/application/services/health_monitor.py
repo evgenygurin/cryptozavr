@@ -55,28 +55,32 @@ class HealthMonitor:
 
     async def _run_probe(self, venue_id: VenueId, probe: HealthProbe) -> str:
         state = self._states.get(venue_id)
-        if state is not None:
-            state.mark_probe_performed(int(time.time() * 1000))
+        outcome: str
         try:
             await probe()
+            outcome = "ok"
+            if state is not None:
+                state.on_request_succeeded()
         except RateLimitExceededError as exc:
             self._logger.warning("health probe rate-limited on %s: %s", venue_id, exc)
             if state is not None:
                 state.on_request_failed(exc)
-            return "rate_limited"
+            outcome = "rate_limited"
         except TimeoutError as exc:
             self._logger.warning("health probe timed out on %s", venue_id)
             if state is not None:
                 state.on_request_failed(exc)
-            return "timeout"
+            outcome = "timeout"
         except Exception as exc:
-            self._logger.warning("health probe failed on %s: %s", venue_id, exc)
+            self._logger.warning("health probe failed on %s: %s", venue_id, exc, exc_info=True)
             if state is not None:
                 state.on_request_failed(exc)
-            return "error"
+            outcome = "error"
+        # Stamp AFTER probe completes — a hung probe must not masquerade
+        # as 'just checked' in the venue_health resource.
         if state is not None:
-            state.on_request_succeeded()
-        return "ok"
+            state.mark_probe_performed(int(time.time() * 1000))
+        return outcome
 
     async def start(self) -> None:
         if self.is_running:

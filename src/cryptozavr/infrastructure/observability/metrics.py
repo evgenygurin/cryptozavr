@@ -28,6 +28,12 @@ class _HistogramStats:
     sum: float = 0.0
 
     def __post_init__(self) -> None:
+        if not self.buckets:
+            raise ValueError("histogram buckets must not be empty")
+        if list(self.buckets) != sorted(self.buckets):
+            raise ValueError(f"histogram buckets must be sorted ascending, got {self.buckets!r}")
+        if self.buckets[-1] != float("inf"):
+            raise ValueError(f"histogram last bucket must be +inf, got {self.buckets[-1]!r}")
         if not self.counts:
             self.counts = [0] * len(self.buckets)
 
@@ -59,6 +65,12 @@ class MetricsRegistry:
     """
 
     def __init__(self, *, buckets: tuple[float, ...] = _DEFAULT_BUCKETS) -> None:
+        if not buckets:
+            raise ValueError("histogram buckets must not be empty")
+        if list(buckets) != sorted(buckets):
+            raise ValueError(f"histogram buckets must be sorted ascending, got {buckets!r}")
+        if buckets[-1] != float("inf"):
+            raise ValueError(f"histogram last bucket must be +inf, got {buckets[-1]!r}")
         self._buckets = buckets
         self._counters: dict[str, dict[tuple[tuple[str, str], ...], int]] = {}
         self._histograms: dict[str, dict[tuple[tuple[str, str], ...], _HistogramStats]] = {}

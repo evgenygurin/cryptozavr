@@ -165,6 +165,32 @@ async def test_start_and_stop_runs_at_least_one_iteration() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mark_probe_performed_fires_after_probe_completes() -> None:
+    """Timestamp must reflect probe completion time, not start — otherwise
+    a hung probe would masquerade as 'just checked'."""
+    events: list[str] = []
+
+    class _SpyState(VenueState):
+        def mark_probe_performed(self, now_ms: int) -> None:
+            events.append("mark")
+            super().mark_probe_performed(now_ms)
+
+    async def probe() -> None:
+        events.append("probe_start")
+        await asyncio.sleep(0)
+        events.append("probe_end")
+
+    state = _SpyState(VenueId.KUCOIN)
+    monitor = HealthMonitor(
+        probes={VenueId.KUCOIN: probe},
+        states={VenueId.KUCOIN: state},
+        metrics=MetricsRegistry(),
+    )
+    await monitor.check_once()
+    assert events == ["probe_start", "probe_end", "mark"]
+
+
+@pytest.mark.asyncio
 async def test_check_once_updates_last_checked_at() -> None:
     registry = MetricsRegistry()
     state = VenueState(VenueId.KUCOIN)
@@ -179,6 +205,33 @@ async def test_check_once_updates_last_checked_at() -> None:
 
     assert state.last_checked_at_ms is not None
     assert state.last_checked_at_ms > 0
+
+
+@pytest.mark.asyncio
+async def test_run_forever_survives_iteration_exception() -> None:
+    """A crashing probe must not kill the loop — next tick should run."""
+    registry = MetricsRegistry()
+    calls = 0
+
+    async def flaky_probe() -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("first iteration crashed")
+
+    monitor = HealthMonitor(
+        probes={VenueId.KUCOIN: flaky_probe},
+        states={VenueId.KUCOIN: VenueState(VenueId.KUCOIN)},
+        metrics=registry,
+        interval_seconds=0.0,
+    )
+    await monitor.start()
+    for _ in range(50):
+        await asyncio.sleep(0.005)
+        if calls >= 2:
+            break
+    await monitor.stop()
+    assert calls >= 2
 
 
 @pytest.mark.asyncio

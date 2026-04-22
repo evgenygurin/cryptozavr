@@ -138,7 +138,7 @@ async def test_list_trending_degrades_with_error_field_on_upstream_failure() -> 
         result = await client.call_tool("list_trending", {})
     payload = _structured(result)
     assert payload["assets"] == []
-    assert "coingecko down" in (payload["error"] or "")
+    assert "RuntimeError" in (payload["error"] or "")
 
 
 @pytest.mark.asyncio

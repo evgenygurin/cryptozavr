@@ -41,21 +41,27 @@ class TickerSyncWorker:
         subs = self._subscriber.subscriptions()
         if not subs:
             return
-        for sub in subs:
-            try:
-                await self._ticker_service.fetch_ticker(
+        results = await asyncio.gather(
+            *(
+                self._ticker_service.fetch_ticker(
                     venue=sub.venue_id,
                     symbol=sub.symbol,
                     force_refresh=True,
                 )
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
+                for sub in subs
+            ),
+            return_exceptions=True,
+        )
+        for sub, result in zip(subs, results, strict=True):
+            if isinstance(result, asyncio.CancelledError):
+                raise result
+            if isinstance(result, BaseException):
                 self._logger.warning(
                     "ticker sync failed for %s/%s: %s",
                     sub.venue_id,
                     sub.symbol,
-                    exc,
+                    result,
+                    exc_info=result,
                 )
 
     async def start(self) -> None:

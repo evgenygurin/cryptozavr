@@ -57,6 +57,13 @@ class TestVenueState:
         state.mark_probe_performed(1_700_000_060_000)
         assert state.last_checked_at_ms == 1_700_000_060_000
 
+    def test_mark_probe_performed_is_monotonic(self) -> None:
+        """Older timestamp must not regress the observable last-seen time."""
+        state = VenueState(venue_id=VenueId.KUCOIN)
+        state.mark_probe_performed(1_700_000_060_000)
+        state.mark_probe_performed(1_700_000_000_000)  # out-of-order
+        assert state.last_checked_at_ms == 1_700_000_060_000
+
 
 class TestTransitions:
     def test_healthy_degrades_after_3_errors(self) -> None:
