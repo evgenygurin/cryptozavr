@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING, Any, cast
 from fastmcp.dependencies import CurrentContext
 
 if TYPE_CHECKING:
+    from cryptozavr.application.risk.engine import RiskEngine
+    from cryptozavr.application.risk.kill_switch import KillSwitch
     from cryptozavr.application.services.analytics_service import AnalyticsService
     from cryptozavr.application.services.discovery_service import DiscoveryService
     from cryptozavr.application.services.ohlcv_service import OhlcvService
@@ -29,6 +31,9 @@ if TYPE_CHECKING:
     from cryptozavr.application.services.trades_service import TradesService
     from cryptozavr.domain.symbols import SymbolRegistry
     from cryptozavr.domain.venues import VenueId
+    from cryptozavr.infrastructure.persistence.risk_policy_repo import (
+        RiskPolicyRepository,
+    )
     from cryptozavr.infrastructure.persistence.strategy_spec_repo import (
         StrategySpecRepository,
     )
@@ -55,6 +60,9 @@ class _LifespanKeys:
     ticker_sync_worker: str = "ticker_sync_worker"
     cache_invalidator: str = "cache_invalidator"
     strategy_spec_repo: str = "strategy_spec_repo"
+    risk_policy_repo: str = "risk_policy_repo"
+    risk_engine: str = "risk_engine"
+    kill_switch: str = "kill_switch"
 
 
 LIFESPAN_KEYS = _LifespanKeys()
@@ -111,3 +119,18 @@ def get_strategy_spec_repo(ctx: Any = _CTX) -> StrategySpecRepository:
         "StrategySpecRepository",
         ctx.lifespan_context[LIFESPAN_KEYS.strategy_spec_repo],
     )
+
+
+def get_risk_policy_repo(ctx: Any = _CTX) -> RiskPolicyRepository:
+    return cast(
+        "RiskPolicyRepository",
+        ctx.lifespan_context[LIFESPAN_KEYS.risk_policy_repo],
+    )
+
+
+def get_risk_engine(ctx: Any = _CTX) -> RiskEngine:
+    return cast("RiskEngine", ctx.lifespan_context[LIFESPAN_KEYS.risk_engine])
+
+
+def get_kill_switch(ctx: Any = _CTX) -> KillSwitch:
+    return cast("KillSwitch", ctx.lifespan_context[LIFESPAN_KEYS.kill_switch])

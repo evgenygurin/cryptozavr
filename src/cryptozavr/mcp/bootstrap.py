@@ -13,6 +13,8 @@ from typing import Any
 
 from supabase import AsyncClient, acreate_client
 
+from cryptozavr.application.risk.engine import RiskEngine, default_handler_chain
+from cryptozavr.application.risk.kill_switch import KillSwitch
 from cryptozavr.application.services.analytics_service import AnalyticsService
 from cryptozavr.application.services.cache_invalidator import CacheInvalidator
 from cryptozavr.application.services.discovery_service import DiscoveryService
@@ -35,6 +37,9 @@ from cryptozavr.application.strategies.vwap import VwapStrategy
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.venues import MarketType, VenueId
 from cryptozavr.infrastructure.observability.metrics import MetricsRegistry
+from cryptozavr.infrastructure.persistence.risk_policy_repo import (
+    RiskPolicyRepository,
+)
 from cryptozavr.infrastructure.persistence.strategy_spec_repo import (
     StrategySpecRepository,
 )
@@ -133,6 +138,9 @@ async def build_production_service(
     pg_pool = await create_pool(PgPoolConfig(dsn=settings.supabase_db_url))
     gateway = SupabaseGateway(pg_pool, registry)
     strategy_spec_repo = StrategySpecRepository(pool=pg_pool)
+    risk_policy_repo = RiskPolicyRepository(pool=pg_pool)
+    kill_switch = KillSwitch()
+    risk_engine = RiskEngine(handlers=default_handler_chain(), kill_switch=kill_switch)
 
     factory = ProviderFactory(
         http_registry=http_registry,
@@ -224,6 +232,9 @@ async def build_production_service(
         LIFESPAN_KEYS.ticker_sync_worker: ticker_sync_worker,
         LIFESPAN_KEYS.cache_invalidator: cache_invalidator,
         LIFESPAN_KEYS.strategy_spec_repo: strategy_spec_repo,
+        LIFESPAN_KEYS.risk_policy_repo: risk_policy_repo,
+        LIFESPAN_KEYS.risk_engine: risk_engine,
+        LIFESPAN_KEYS.kill_switch: kill_switch,
     }
 
     async def cleanup() -> None:
