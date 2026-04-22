@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -19,6 +19,10 @@ from cryptozavr.domain.market_data import (
 )
 from cryptozavr.domain.symbols import Symbol
 from cryptozavr.domain.value_objects import PriceSize
+
+# 4-decimal precision (0.0001 bps) is far tighter than any venue tick size and
+# avoids leaking 28-digit Decimal remainders from the domain computation.
+_SPREAD_BPS_QUANTUM = Decimal("0.0001")
 
 
 class TickerDTO(BaseModel):
@@ -197,6 +201,7 @@ class OrderBookDTO(BaseModel):
         snapshot: OrderBookSnapshot,
         reason_codes: list[str],
     ) -> OrderBookDTO:
+        raw_bps = snapshot.spread_bps()
         return cls(
             venue=snapshot.symbol.venue.value,
             symbol=snapshot.symbol.native_symbol,
@@ -204,7 +209,11 @@ class OrderBookDTO(BaseModel):
             bids=[PriceSizeDTO.from_domain(b) for b in snapshot.bids],
             asks=[PriceSizeDTO.from_domain(a) for a in snapshot.asks],
             spread=snapshot.spread(),
-            spread_bps=snapshot.spread_bps(),
+            spread_bps=(
+                raw_bps.quantize(_SPREAD_BPS_QUANTUM, rounding=ROUND_HALF_EVEN)
+                if raw_bps is not None
+                else None
+            ),
             staleness=snapshot.quality.staleness.name.lower(),
             confidence=snapshot.quality.confidence.name.lower(),
             cache_hit=snapshot.quality.cache_hit,
