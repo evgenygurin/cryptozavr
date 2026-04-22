@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Position watcher: `watch_position`, `check_watch`, `stop_watch` MCP
+  tools for real-time event-driven monitoring of active paper-trading
+  positions via `ccxt.pro.kucoin` WebSocket. Events: stop/take hit,
+  timeout (terminal), plus fire-once approach/breakeven signals.
+
 ### Added — Phase 2 Sub-project A — BacktestEngine
 
 - `cryptozavr.application.backtest` package — hybrid backtesting engine
