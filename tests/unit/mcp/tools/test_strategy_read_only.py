@@ -1,7 +1,9 @@
-"""Tests for Unit 2D-2 read-only strategy tools: list / explain / diff.
+"""Tests for Unit 2D-2 / 2E-1 read-only strategy tools: list / explain / diff.
 
-All three tools are pure (no DI dependencies), so a trivial no-op lifespan is
-sufficient. We use the same Client(mcp).call_tool(...) pattern as
+explain_strategy / diff_strategies are pure (no DI dependencies). list_
+strategies, as of 2E-1, pulls from StrategySpecRepository — tests inject a
+MagicMock with an AsyncMock `list_recent` returning a list of StoredStrategy-
+Row instances. We use the same Client(mcp).call_tool(...) pattern as
 test_validate_strategy / test_catalog_tools and a shared `_structured`
 helper to extract either structured_content (MCP-native) or parsed text JSON.
 """
@@ -11,11 +13,19 @@ from __future__ import annotations
 import json
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from fastmcp import Client, FastMCP
 from pydantic import ValidationError
 
+from cryptozavr.infrastructure.persistence.strategy_spec_repo import (
+    StoredStrategyRow,
+    StrategySpecRepository,
+)
+from cryptozavr.mcp.lifespan_state import LIFESPAN_KEYS
 from cryptozavr.mcp.tools.strategy_dtos import (
     DiffStrategiesResponse,
     ExplainStrategyResponse,
@@ -25,14 +35,52 @@ from cryptozavr.mcp.tools.strategy_dtos import (
 from cryptozavr.mcp.tools.strategy_read_only import register_strategy_read_only_tools
 
 
-def _build_server() -> FastMCP:
+def _build_server(repo: MagicMock | None = None) -> FastMCP:
+    """Build a server with an optional mock StrategySpecRepository in the
+    lifespan dict. Tools that don't touch the repo (explain / diff) still need
+    a StrategySpecRepository-spec'd mock so FastMCP's `Depends()` resolver
+    doesn't try to treat the repo as a context manager (bare MagicMock()
+    synthesises __aenter__ which trips resolve-time wrapping)."""
+    effective_repo = repo if repo is not None else _mock_repo(rows=[])
+
     @asynccontextmanager
     async def lifespan(_server):  # type: ignore[no-untyped-def]
-        yield {}
+        yield {LIFESPAN_KEYS.strategy_spec_repo: effective_repo}
 
     mcp = FastMCP(name="t", version="0", lifespan=lifespan)
     register_strategy_read_only_tools(mcp)
     return mcp
+
+
+def _mock_repo(rows: list[StoredStrategyRow] | None = None) -> MagicMock:
+    """Build a StrategySpecRepository-spec MagicMock with a pre-wired
+    `list_recent` AsyncMock. The `spec=...` constraint is load-bearing —
+    see docstring on `_build_server`."""
+    repo = MagicMock(spec=StrategySpecRepository)
+    repo.list_recent = AsyncMock(return_value=list(rows or []))
+    return repo
+
+
+def _make_row(
+    *,
+    name: str = "sma-cross",
+    version: int = 1,
+    venue_id: str = "kucoin",
+    symbol_native: str = "BTC-USDT",
+    timeframe: str = "1h",
+) -> StoredStrategyRow:
+    created = datetime(2026, 4, 22, 12, 0, 0, tzinfo=UTC)
+    updated = datetime(2026, 4, 22, 12, 30, 0, tzinfo=UTC)
+    return StoredStrategyRow(
+        id=uuid4(),
+        name=name,
+        version=version,
+        venue_id=venue_id,
+        symbol_native=symbol_native,
+        timeframe=timeframe,
+        created_at_ms=int(created.timestamp() * 1000),
+        updated_at_ms=int(updated.timestamp() * 1000),
+    )
 
 
 def _structured(result) -> dict:  # type: ignore[no-untyped-def]
@@ -80,28 +128,72 @@ def _valid_payload() -> dict:
 
 class TestListStrategies:
     @pytest.mark.asyncio
-    async def test_returns_empty_list_with_2e_note(self) -> None:
-        mcp = _build_server()
+    async def test_empty_repo_returns_empty_list(self) -> None:
+        repo = _mock_repo(rows=[])
+        mcp = _build_server(repo)
         async with Client(mcp) as client:
             result = await client.call_tool("list_strategies", {})
         payload = _structured(result)
         assert payload["strategies"] == []
-        assert payload["note"] is not None
-        assert "2E" in payload["note"]
+        assert payload["error"] is None
+        # list_recent called with default limit=50
+        repo.list_recent.assert_awaited_once_with(limit=50)
+
+    @pytest.mark.asyncio
+    async def test_rows_mapped_to_summary_dto(self) -> None:
+        row = _make_row(name="sma-cross", venue_id="kucoin", symbol_native="BTC-USDT")
+        repo = _mock_repo(rows=[row])
+        mcp = _build_server(repo)
+        async with Client(mcp) as client:
+            result = await client.call_tool("list_strategies", {})
+        payload = _structured(result)
+        assert len(payload["strategies"]) == 1
+        entry = payload["strategies"][0]
+        assert entry["id"] == str(row.id)
+        assert entry["name"] == "sma-cross"
+        assert entry["version"] == row.version
+        assert entry["venue"] == "kucoin"
+        assert entry["symbol_native"] == "BTC-USDT"
+        assert entry["timeframe"] == "1h"
+        assert entry["created_at_ms"] == row.created_at_ms
+        assert entry["updated_at_ms"] == row.updated_at_ms
+        assert payload["error"] is None
+
+    @pytest.mark.asyncio
+    async def test_limit_passed_through_to_repo(self) -> None:
+        repo = _mock_repo(rows=[])
+        mcp = _build_server(repo)
+        async with Client(mcp) as client:
+            await client.call_tool("list_strategies", {"limit": 5})
+        repo.list_recent.assert_awaited_once_with(limit=5)
+
+    @pytest.mark.asyncio
+    async def test_repository_error_surfaces_in_error_field(self) -> None:
+        repo = MagicMock(spec=StrategySpecRepository)
+        repo.list_recent = AsyncMock(side_effect=RuntimeError("db down"))
+        mcp = _build_server(repo)
+        async with Client(mcp) as client:
+            result = await client.call_tool("list_strategies", {})
+        payload = _structured(result)
+        assert payload["strategies"] == []
+        assert payload["error"] is not None
+        assert "RuntimeError" in payload["error"]
+        assert "db down" in payload["error"]
 
     @pytest.mark.asyncio
     async def test_structured_content_populated(self) -> None:
-        mcp = _build_server()
+        repo = _mock_repo(rows=[])
+        mcp = _build_server(repo)
         async with Client(mcp) as client:
             result = await client.call_tool("list_strategies", {})
         sc = getattr(result, "structured_content", None)
         if sc is not None:
             assert "strategies" in sc
-            assert "note" in sc
+            assert "error" in sc
         else:
             parsed = json.loads(result.content[0].text)
             assert "strategies" in parsed
-            assert "note" in parsed
+            assert "error" in parsed
 
 
 # -------------------------- explain_strategy -------------------------------

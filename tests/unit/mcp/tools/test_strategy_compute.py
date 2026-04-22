@@ -1,11 +1,12 @@
-"""Tests for Unit 2D-3 compute strategy tools.
+"""Tests for Unit 2D-3 / 2E-1 compute strategy tools.
 
 Covers backtest_strategy / compare_strategies / stress_test / save_strategy.
 
 backtest_strategy runs a real BacktestEngine + 5 visitors against a mocked
 OhlcvService. stress_test runs against synthetic pd.DataFrames generated
 inside the tool (no OhlcvService path). compare_strategies loops
-backtest_strategy. save_strategy is a stub for 2E.
+backtest_strategy. save_strategy (2E-1) calls a mocked StrategySpecRepository
+and surfaces the upsert UUID.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from contextlib import asynccontextmanager
 from copy import deepcopy
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from fastmcp import Client, FastMCP
@@ -40,6 +42,9 @@ from cryptozavr.domain.quality import (
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.value_objects import Instant, Timeframe, TimeRange
 from cryptozavr.domain.venues import MarketType, VenueId
+from cryptozavr.infrastructure.persistence.strategy_spec_repo import (
+    StrategySpecRepository,
+)
 from cryptozavr.mcp.lifespan_state import LIFESPAN_KEYS
 from cryptozavr.mcp.tools.strategy_backtest_dtos import (
     BacktestReportDTO,
@@ -190,10 +195,25 @@ def _make_tiny_series(n_candles: int) -> OHLCVSeries:
     )
 
 
-def _build_server(mock_service: MagicMock) -> FastMCP:
+def _build_server(
+    mock_service: MagicMock,
+    mock_repo: MagicMock | None = None,
+) -> FastMCP:
+    """Build a FastMCP server with mocked lifespan dependencies.
+
+    `mock_service` → OhlcvService (required for backtest / compare tools).
+    `mock_repo`    → StrategySpecRepository (required for save_strategy;
+                    backtest/compare/stress don't touch it). Default: a bare
+                    MagicMock() so tools that don't use it still load.
+    """
+    effective_repo = mock_repo if mock_repo is not None else _mock_spec_repo()
+
     @asynccontextmanager
     async def lifespan(_server):  # type: ignore[no-untyped-def]
-        yield {LIFESPAN_KEYS.ohlcv_service: mock_service}
+        yield {
+            LIFESPAN_KEYS.ohlcv_service: mock_service,
+            LIFESPAN_KEYS.strategy_spec_repo: effective_repo,
+        }
 
     mcp = FastMCP(name="t", version="0", lifespan=lifespan)
     register_strategy_compute_tools(mcp)
@@ -209,6 +229,27 @@ def _mock_ohlcv_service(series: OHLCVSeries, reason_codes: list[str] | None = No
         ),
     )
     return service
+
+
+def _mock_spec_repo(
+    *,
+    save_return: object | None = None,
+    save_side_effect: BaseException | None = None,
+) -> MagicMock:
+    """Build a StrategySpecRepository-spec MagicMock.
+
+    The `spec=StrategySpecRepository` constraint is load-bearing: FastMCP's
+    Depends() resolver tries `async with` on any Depends value that exposes
+    `__aenter__`. A bare MagicMock() synthesises those dunder attributes,
+    which trips the resolver. Constraining with `spec=...` hides those
+    attributes unless the real class defines them.
+    """
+    repo = MagicMock(spec=StrategySpecRepository)
+    if save_side_effect is not None:
+        repo.save = AsyncMock(side_effect=save_side_effect)
+    else:
+        repo.save = AsyncMock(return_value=save_return)
+    return repo
 
 
 # --------------------------- backtest_strategy -------------------------------
@@ -557,23 +598,47 @@ class TestStressTest:
 
 class TestSaveStrategy:
     @pytest.mark.asyncio
-    async def test_valid_payload_returns_stub_note(self) -> None:
+    async def test_valid_payload_returns_id_and_saved_note(self) -> None:
         service = _mock_ohlcv_service(_make_tiny_series(2))
-        mcp = _build_server(service)
+        new_id = uuid4()
+        repo = _mock_spec_repo(save_return=new_id)
+        mcp = _build_server(service, mock_repo=repo)
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "save_strategy",
                 {"spec": _valid_spec_payload()},
             )
         payload = _structured(result)
-        assert payload["id"] is None
-        assert "2E" in payload["note"]
+        assert payload["id"] == str(new_id)
+        assert payload["note"] == "saved"
         assert payload["error"] is None
+        # Repo invoked exactly once with a StrategySpecPayload instance.
+        assert repo.save.await_count == 1
+        saved_payload = repo.save.await_args.args[0]
+        assert saved_payload.name == "sma-cross"
+
+    @pytest.mark.asyncio
+    async def test_idempotent_same_spec_returns_same_id(self) -> None:
+        service = _mock_ohlcv_service(_make_tiny_series(2))
+        existing_id = uuid4()
+        repo = _mock_spec_repo(save_return=existing_id)
+        mcp = _build_server(service, mock_repo=repo)
+        async with Client(mcp) as client:
+            r1 = await client.call_tool(
+                "save_strategy",
+                {"spec": _valid_spec_payload()},
+            )
+            r2 = await client.call_tool(
+                "save_strategy",
+                {"spec": _valid_spec_payload()},
+            )
+        assert _structured(r1)["id"] == _structured(r2)["id"] == str(existing_id)
 
     @pytest.mark.asyncio
     async def test_invalid_payload_returns_error_empty_note(self) -> None:
         service = _mock_ohlcv_service(_make_tiny_series(2))
-        mcp = _build_server(service)
+        repo = _mock_spec_repo(save_return=uuid4())
+        mcp = _build_server(service, mock_repo=repo)
         bad = _valid_spec_payload()
         del bad["name"]
         async with Client(mcp) as client:
@@ -585,16 +650,46 @@ class TestSaveStrategy:
         assert payload["error"] is not None
         assert payload["id"] is None
         assert payload["note"] == ""
+        # Repo must not be called when the spec is malformed.
+        repo.save.assert_not_awaited()
 
-    def test_coherence_accepts_null_id_with_note(self) -> None:
-        resp = SaveStrategyResponse(id=None, note="stub note", error=None)
+    @pytest.mark.asyncio
+    async def test_repository_failure_surfaces_in_error(self) -> None:
+        service = _mock_ohlcv_service(_make_tiny_series(2))
+        repo = _mock_spec_repo(save_side_effect=RuntimeError("pg down"))
+        mcp = _build_server(service, mock_repo=repo)
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "save_strategy",
+                {"spec": _valid_spec_payload()},
+            )
+        payload = _structured(result)
+        assert payload["id"] is None
+        assert payload["note"] == ""
+        assert payload["error"] is not None
+        assert "RuntimeError" in payload["error"]
+        assert "pg down" in payload["error"]
+
+    def test_coherence_accepts_null_id_with_empty_note(self) -> None:
+        resp = SaveStrategyResponse(id=None, note="", error="bad spec")
         assert resp.id is None
-        assert resp.note == "stub note"
+        assert resp.note == ""
+        assert resp.error == "bad spec"
+
+    def test_coherence_accepts_id_with_saved_note(self) -> None:
+        resp = SaveStrategyResponse(
+            id="8c2b3f4a-5e69-4a10-a4c2-1f3b4a5e6901",
+            note="saved",
+            error=None,
+        )
+        assert resp.id == "8c2b3f4a-5e69-4a10-a4c2-1f3b4a5e6901"
+        assert resp.note == "saved"
 
     @pytest.mark.asyncio
     async def test_structured_content_populated(self) -> None:
         service = _mock_ohlcv_service(_make_tiny_series(2))
-        mcp = _build_server(service)
+        repo = _mock_spec_repo(save_return=uuid4())
+        mcp = _build_server(service, mock_repo=repo)
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "save_strategy",
@@ -602,7 +697,9 @@ class TestSaveStrategy:
             )
         sc = getattr(result, "structured_content", None)
         if sc is not None:
+            assert "id" in sc
             assert "note" in sc
+            assert "error" in sc
 
 
 # --------------------------- DTO-level unit tests ----------------------------

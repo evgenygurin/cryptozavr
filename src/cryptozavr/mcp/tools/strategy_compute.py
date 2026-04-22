@@ -1,4 +1,4 @@
-"""Unit 2D-3 compute-layer strategy tools.
+"""Unit 2D-3 / 2E-1 compute-layer strategy tools.
 
 Four MCP tools:
   * backtest_strategy — flagship; load OHLCV via OhlcvService, run through
@@ -7,7 +7,8 @@ Four MCP tools:
     side-by-side comparison dict keyed by metric name.
   * stress_test — run a spec against synthetic bull / bear / chop regimes
     (no OhlcvService call; scenarios are deterministic pd.DataFrames).
-  * save_strategy — stub until Unit 2E-1 lands real persistence.
+  * save_strategy — persist spec via StrategySpecRepository (2E-1); returns
+    the upsert UUID (idempotent by content_hash).
 
 All four tools receive their payload as a single `dict[str, Any]` so
 malformed JSON surfaces as a structured `error` field instead of a
@@ -42,7 +43,10 @@ from cryptozavr.application.strategy.strategy_spec import StrategySpec
 from cryptozavr.domain.exceptions import ValidationError as DomainValidationError
 from cryptozavr.domain.market_data import OHLCVSeries
 from cryptozavr.domain.value_objects import Instant
-from cryptozavr.mcp.lifespan_state import get_ohlcv_service
+from cryptozavr.infrastructure.persistence.strategy_spec_repo import (
+    StrategySpecRepository,
+)
+from cryptozavr.mcp.lifespan_state import get_ohlcv_service, get_strategy_spec_repo
 from cryptozavr.mcp.tools.strategy_backtest_dtos import (
     BacktestReportDTO,
     BacktestStrategyResponse,
@@ -58,8 +62,9 @@ _DEFAULT_INITIAL_EQUITY = "10000"
 _DEFAULT_SCENARIOS = ("bull", "bear", "chop")
 _SCENARIO_BARS = 200
 
-# Module-level singleton — avoids B008 (function call in default argument).
+# Module-level singletons — avoid B008 (function call in default argument).
 _OHLCV_SERVICE: OhlcvService = Depends(get_ohlcv_service)
+_STRATEGY_SPEC_REPO: StrategySpecRepository = Depends(get_strategy_spec_repo)
 
 
 # --------------------------- helpers -----------------------------------------
@@ -433,15 +438,35 @@ def _run_stress_scenarios(
 async def _save_strategy_impl(
     spec: dict[str, Any],
     ctx: Context,
+    repo: StrategySpecRepository,
 ) -> SaveStrategyResponse:
     await ctx.info("save_strategy")
+    # _parse_spec_or_error yields a domain StrategySpec (post to_domain())
+    # but the repo contract is the pydantic StrategySpecPayload — we parse
+    # twice to keep contract-parse errors coherent with the rest of the
+    # tool family. Cheap: both are O(spec size).
     _domain_spec, err = _parse_spec_or_error(spec)
     if err is not None:
         return SaveStrategyResponse(id=None, note="", error=err)
-    return SaveStrategyResponse(
-        id=None,
-        note="Persistence lands in Unit 2E-1; spec validated but not stored.",
-    )
+    try:
+        payload = StrategySpecPayload.model_validate(spec)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        loc = "/".join(str(p) for p in first["loc"]) or "<root>"
+        return SaveStrategyResponse(
+            id=None,
+            note="",
+            error=f"spec invalid at {loc}: {first['msg']}",
+        )
+    try:
+        row_id = await repo.save(payload)
+    except Exception as exc:
+        return SaveStrategyResponse(
+            id=None,
+            note="",
+            error=f"repository error: {type(exc).__name__}: {exc}",
+        )
+    return SaveStrategyResponse(id=str(row_id), note="saved", error=None)
 
 
 # --------------------------- registration ------------------------------------
@@ -539,14 +564,16 @@ def register_strategy_compute_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="save_strategy",
         description=(
-            "Persist a StrategySpec. STUB until Unit 2E-1 lands a real "
-            "repository — parses the payload and returns a placeholder "
-            "response explaining the stub; does not mutate any store."
+            "Persist a StrategySpec via cryptozavr.strategy_specs. Upsert "
+            "keyed on BLAKE2b content_hash — saving the same spec twice "
+            "returns the existing id (idempotent per canonical JSON). "
+            "Returns the uuid on success; `error` + id=None on parse or "
+            "repository failure."
         ),
         tags={"strategy", "compute", "phase-2"},
         annotations={
-            "readOnlyHint": True,  # Stub — actually stateless for MVP.
-            "idempotentHint": False,
+            "readOnlyHint": False,
+            "idempotentHint": True,
             "destructiveHint": False,
         },
     )
@@ -556,5 +583,6 @@ def register_strategy_compute_tools(mcp: FastMCP) -> None:
             Field(description="StrategySpec payload (raw JSON object)."),
         ],
         ctx: Context,
+        repo: StrategySpecRepository = _STRATEGY_SPEC_REPO,
     ) -> SaveStrategyResponse:
-        return await _save_strategy_impl(spec, ctx)
+        return await _save_strategy_impl(spec, ctx, repo)

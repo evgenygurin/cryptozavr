@@ -29,6 +29,9 @@ if TYPE_CHECKING:
     from cryptozavr.application.services.trades_service import TradesService
     from cryptozavr.domain.symbols import SymbolRegistry
     from cryptozavr.domain.venues import VenueId
+    from cryptozavr.infrastructure.persistence.strategy_spec_repo import (
+        StrategySpecRepository,
+    )
     from cryptozavr.infrastructure.providers.state.venue_state import VenueState
     from cryptozavr.infrastructure.supabase.realtime import RealtimeSubscriber
 
@@ -51,6 +54,7 @@ class _LifespanKeys:
     health_monitor: str = "health_monitor"
     ticker_sync_worker: str = "ticker_sync_worker"
     cache_invalidator: str = "cache_invalidator"
+    strategy_spec_repo: str = "strategy_spec_repo"
 
 
 LIFESPAN_KEYS = _LifespanKeys()
@@ -99,4 +103,11 @@ def get_venue_states(ctx: Any = _CTX) -> dict[VenueId, VenueState]:
     return cast(
         "dict[VenueId, VenueState]",
         ctx.lifespan_context[LIFESPAN_KEYS.venue_states],
+    )
+
+
+def get_strategy_spec_repo(ctx: Any = _CTX) -> StrategySpecRepository:
+    return cast(
+        "StrategySpecRepository",
+        ctx.lifespan_context[LIFESPAN_KEYS.strategy_spec_repo],
     )

@@ -35,6 +35,9 @@ from cryptozavr.application.strategies.vwap import VwapStrategy
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.venues import MarketType, VenueId
 from cryptozavr.infrastructure.observability.metrics import MetricsRegistry
+from cryptozavr.infrastructure.persistence.strategy_spec_repo import (
+    StrategySpecRepository,
+)
 from cryptozavr.infrastructure.providers.factory import ProviderFactory
 from cryptozavr.infrastructure.providers.http import HttpClientRegistry
 from cryptozavr.infrastructure.providers.rate_limiters import (
@@ -129,6 +132,7 @@ async def build_production_service(
 
     pg_pool = await create_pool(PgPoolConfig(dsn=settings.supabase_db_url))
     gateway = SupabaseGateway(pg_pool, registry)
+    strategy_spec_repo = StrategySpecRepository(pool=pg_pool)
 
     factory = ProviderFactory(
         http_registry=http_registry,
@@ -219,6 +223,7 @@ async def build_production_service(
         LIFESPAN_KEYS.health_monitor: health_monitor,
         LIFESPAN_KEYS.ticker_sync_worker: ticker_sync_worker,
         LIFESPAN_KEYS.cache_invalidator: cache_invalidator,
+        LIFESPAN_KEYS.strategy_spec_repo: strategy_spec_repo,
     }
 
     async def cleanup() -> None:

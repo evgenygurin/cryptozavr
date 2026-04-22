@@ -158,10 +158,14 @@ class StressTestResponse(BaseModel):
 
 
 class SaveStrategyResponse(BaseModel):
-    """Stub response for save_strategy until 2E-1 wires real persistence.
+    """Response for save_strategy (2E-1 persistence).
 
-    `id` is always None for now; `note` explains the stub; `error` is set
-    only when the payload itself couldn't be parsed.
+    Success: `id` is the UUID string from the upsert (new or existing by
+    content_hash — saves are idempotent per canonical spec JSON), `note`
+    is a short human-readable status line (e.g. 'saved'), `error` is None.
+
+    Failure: `id` is None, `note` is empty, `error` carries the problem
+    (parse failure, repo call failure, etc.).
     """
 
     model_config = ConfigDict(frozen=True)

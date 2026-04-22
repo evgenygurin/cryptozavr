@@ -1,10 +1,10 @@
-"""Unit 2D-2 read-only strategy tools: list / explain / diff.
+"""Unit 2D-2 / 2E-1 read-only strategy tools: list / explain / diff.
 
-All three tools are pure (no DI dependencies) — list_strategies is a
-placeholder stub until 2E-1 wires persistence, explain_strategy renders a
+`list_strategies` delegates to `StrategySpecRepository.list_recent()` — real
+Supabase-backed persistence landed in 2E-1. `explain_strategy` renders a
 human-readable markdown + structured sections view of a StrategySpec payload,
-and diff_strategies produces JSON-pointer-style per-field diffs between two
-payloads.
+and `diff_strategies` produces JSON-pointer-style per-field diffs between two
+payloads. Both are pure (no DI dependencies).
 
 Payloads are validated via `StrategySpecPayload.model_validate`; bad input
 is surfaced through coherent error fields on the response DTOs rather than
@@ -16,8 +16,13 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastmcp import Context, FastMCP
+from fastmcp.dependencies import Depends
 from pydantic import Field, ValidationError
 
+from cryptozavr.infrastructure.persistence.strategy_spec_repo import (
+    StrategySpecRepository,
+)
+from cryptozavr.mcp.lifespan_state import get_strategy_spec_repo
 from cryptozavr.mcp.tools.strategy_dtos import (
     ConditionPayload,
     DiffStrategiesResponse,
@@ -26,8 +31,12 @@ from cryptozavr.mcp.tools.strategy_dtos import (
     FieldDiffDTO,
     IndicatorRefPayload,
     ListStrategiesResponse,
+    StoredStrategySummaryDTO,
     StrategySpecPayload,
 )
+
+# Module-level singleton — avoids B008 (function call in default argument).
+_STRATEGY_SPEC_REPO: StrategySpecRepository = Depends(get_strategy_spec_repo)
 
 
 def _render_indicator(ref: IndicatorRefPayload) -> str:
@@ -114,8 +123,10 @@ def register_strategy_read_only_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="list_strategies",
         description=(
-            "List saved strategies. Placeholder — persistence lands in Unit "
-            "2E-1; for now returns an empty list and a note explaining the stub."
+            "List persisted strategies ordered by created_at DESC (most recent "
+            "first). Returns summaries (id, name, version, venue, symbol, "
+            "timeframe, created/updated timestamps). On DB failure returns an "
+            "empty list with `error` populated."
         ),
         tags={"strategy", "read-only", "phase-2"},
         annotations={
@@ -124,11 +135,37 @@ def register_strategy_read_only_tools(mcp: FastMCP) -> None:
             "destructiveHint": False,
         },
     )
-    async def list_strategies(ctx: Context) -> ListStrategiesResponse:
+    async def list_strategies(
+        ctx: Context,
+        limit: Annotated[
+            int,
+            Field(default=50, ge=1, le=500, description="Max rows to return."),
+        ] = 50,
+        repo: StrategySpecRepository = _STRATEGY_SPEC_REPO,
+    ) -> ListStrategiesResponse:
         await ctx.info("list_strategies")
+        try:
+            rows = await repo.list_recent(limit=limit)
+        except Exception as exc:
+            return ListStrategiesResponse(
+                strategies=[],
+                error=f"repository error: {type(exc).__name__}: {exc}",
+            )
         return ListStrategiesResponse(
-            strategies=[],
-            note="Persistence lands in Unit 2E-1; stub returns empty list.",
+            strategies=[
+                StoredStrategySummaryDTO(
+                    id=str(r.id),
+                    name=r.name,
+                    version=r.version,
+                    venue=r.venue_id,
+                    symbol_native=r.symbol_native,
+                    timeframe=r.timeframe,
+                    created_at_ms=r.created_at_ms,
+                    updated_at_ms=r.updated_at_ms,
+                )
+                for r in rows
+            ],
+            error=None,
         )
 
     @mcp.tool(

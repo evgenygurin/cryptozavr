@@ -216,8 +216,9 @@ class ValidateStrategyResponse(BaseModel):
 class StoredStrategySummaryDTO(BaseModel):
     """Summary of a persisted strategy (no embedded spec — fetch separately).
 
-    Shape locked now so 2E can swap the in-memory stub for a real repository
-    without changing the wire contract.
+    Extended in 2E-1 with venue / symbol_native / timeframe because the repo
+    denormalises those columns for fast filters, and they make the list view
+    useful without a second fetch per row.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -225,19 +226,24 @@ class StoredStrategySummaryDTO(BaseModel):
     id: str
     name: str
     version: int
+    venue: str
+    symbol_native: str
+    timeframe: str
     created_at_ms: int
+    updated_at_ms: int
 
 
 class ListStrategiesResponse(BaseModel):
-    """Response for list_strategies. Until 2E lands persistence this returns
-    an empty list and sets `note` to explain the stub. Coherent once the
-    repository is wired: `note` becomes None for a healthy response.
+    """Response for list_strategies.
+
+    2E-1 wires this to the real StrategySpecRepository. `error` is set only
+    when the repo / DB call fails; on success it's None.
     """
 
     model_config = ConfigDict(frozen=True)
 
     strategies: list[StoredStrategySummaryDTO] = Field(default_factory=list)
-    note: str | None = None
+    error: str | None = None
 
 
 class ExplanationSectionDTO(BaseModel):
