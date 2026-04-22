@@ -1,1 +1,1 @@
-"""Provider decorators: Retry, RateLimit, Caching, Logging."""
+"""Provider decorators: Retry, RateLimit, Caching, Logging, Metrics."""

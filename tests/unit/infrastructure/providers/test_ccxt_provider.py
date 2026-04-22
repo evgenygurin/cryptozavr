@@ -13,8 +13,9 @@ from cryptozavr.domain.exceptions import (
     ProviderUnavailableError,
     RateLimitExceededError,
 )
+from cryptozavr.domain.market_data import TradeSide
 from cryptozavr.domain.symbols import SymbolRegistry
-from cryptozavr.domain.value_objects import Timeframe
+from cryptozavr.domain.value_objects import Instant, Timeframe
 from cryptozavr.domain.venues import MarketType, VenueId
 from cryptozavr.infrastructure.providers.ccxt_provider import CCXTProvider
 from cryptozavr.infrastructure.providers.state.venue_state import VenueState
@@ -31,16 +32,20 @@ class _FakeExchange:
         ticker: dict | None = None,
         ohlcv: list | None = None,
         order_book: dict | None = None,
+        trades: list | None = None,
         load_markets_raises: Exception | None = None,
         ticker_raises: Exception | None = None,
     ) -> None:
         self._ticker = ticker
         self._ohlcv = ohlcv
         self._order_book = order_book
+        self._trades = trades
         self._load_markets_raises = load_markets_raises
         self._ticker_raises = ticker_raises
         self.load_markets_called = 0
         self.closed = False
+        self.last_order_book_limit: int | None = None
+        self.last_trades_args: tuple[str, int | None, int] | None = None
 
     async def load_markets(self) -> dict:
         self.load_markets_called += 1
@@ -66,7 +71,18 @@ class _FakeExchange:
 
     async def fetch_order_book(self, symbol: str, limit: int = 50) -> dict:
         assert self._order_book is not None
+        self.last_order_book_limit = limit
         return self._order_book
+
+    async def fetch_trades(
+        self,
+        symbol: str,
+        since: int | None = None,
+        limit: int = 100,
+    ) -> list:
+        assert self._trades is not None
+        self.last_trades_args = (symbol, since, limit)
+        return self._trades
 
     async def close(self) -> None:
         self.closed = True
@@ -193,3 +209,104 @@ async def test_markets_loaded_only_once(btc_symbol, ticker_fix: dict) -> None:
     await provider.fetch_ticker(btc_symbol)
     await provider.fetch_ticker(btc_symbol)
     assert fake.load_markets_called == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("requested", "expected_limit"),
+    [(1, 20), (15, 20), (20, 20), (21, 100), (50, 100), (200, 100)],
+)
+async def test_order_book_depth_snapped_for_kucoin(
+    btc_symbol,
+    ob_fix: dict,
+    requested: int,
+    expected_limit: int,
+) -> None:
+    fake = _FakeExchange(order_book=ob_fix)
+    provider = CCXTProvider(
+        venue_id=VenueId.KUCOIN,
+        state=VenueState(VenueId.KUCOIN),
+        exchange=fake,
+    )
+    await provider.fetch_order_book(btc_symbol, depth=requested)
+    assert fake.last_order_book_limit == expected_limit
+
+
+@pytest.mark.asyncio
+async def test_fetch_trades_happy_path(btc_symbol) -> None:
+    raw = [
+        {
+            "id": "t1",
+            "timestamp": 1_700_000_000_000,
+            "side": "buy",
+            "price": 65000.5,
+            "amount": 0.01,
+        },
+        {
+            "id": "t2",
+            "timestamp": 1_700_000_001_000,
+            "side": "sell",
+            "price": 65001.0,
+            "amount": 0.02,
+        },
+    ]
+    fake = _FakeExchange(trades=raw)
+    provider = CCXTProvider(
+        venue_id=VenueId.KUCOIN,
+        state=VenueState(VenueId.KUCOIN),
+        exchange=fake,
+    )
+
+    trades = await provider.fetch_trades(btc_symbol, limit=5)
+
+    assert len(trades) == 2
+    assert trades[0].side is TradeSide.BUY
+    assert trades[1].side is TradeSide.SELL
+    assert trades[0].price == Decimal("65000.5")
+    assert trades[0].size == Decimal("0.01")
+    assert trades[0].trade_id == "t1"
+    assert fake.last_trades_args == ("BTC-USDT", None, 5)
+
+
+@pytest.mark.asyncio
+async def test_fetch_trades_forwards_since_as_ms(btc_symbol) -> None:
+    """`since: Instant` must be converted to int ms before hitting CCXT."""
+
+    raw = [
+        {
+            "id": "t1",
+            "timestamp": 1_700_000_000_000,
+            "side": "buy",
+            "price": 1.0,
+            "amount": 1.0,
+        }
+    ]
+    fake = _FakeExchange(trades=raw)
+    provider = CCXTProvider(
+        venue_id=VenueId.KUCOIN,
+        state=VenueState(VenueId.KUCOIN),
+        exchange=fake,
+    )
+    await provider.fetch_trades(btc_symbol, since=Instant.from_ms(1_699_900_000_000), limit=5)
+    assert fake.last_trades_args == ("BTC-USDT", 1_699_900_000_000, 5)
+
+
+@pytest.mark.asyncio
+async def test_fetch_trades_unknown_side_falls_back(btc_symbol) -> None:
+    raw = [
+        {
+            "id": "t1",
+            "timestamp": 0,
+            "side": "weird",
+            "price": 1.0,
+            "amount": 1.0,
+        },
+    ]
+    fake = _FakeExchange(trades=raw)
+    provider = CCXTProvider(
+        venue_id=VenueId.KUCOIN,
+        state=VenueState(VenueId.KUCOIN),
+        exchange=fake,
+    )
+    trades = await provider.fetch_trades(btc_symbol, limit=1)
+    assert trades[0].side is TradeSide.UNKNOWN

@@ -9,6 +9,7 @@ import pytest
 from cryptozavr.infrastructure.supabase.realtime import (
     RealtimeSubscriber,
     SubscriptionHandle,
+    TickerSubscription,
 )
 
 
@@ -45,10 +46,11 @@ class TestRealtimeSubscriber:
         channel.subscribe.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_subscribe_filters_by_venue(
+    async def test_subscribe_omits_filter_by_default(
         self,
         async_supabase_client,
     ) -> None:
+        """tickers_live has no venue_id column — default must NOT filter."""
         client, channel = async_supabase_client
         subscriber = RealtimeSubscriber(client=client)
         await subscriber.subscribe_tickers(
@@ -56,8 +58,22 @@ class TestRealtimeSubscriber:
             callback=lambda _: None,
         )
         _, kwargs = channel.on_postgres_changes.call_args
-        assert "filter" in kwargs
-        assert "venue_id=eq.coingecko" in kwargs["filter"]
+        assert "filter" not in kwargs
+
+    @pytest.mark.asyncio
+    async def test_subscribe_honors_explicit_filter_expr(
+        self,
+        async_supabase_client,
+    ) -> None:
+        client, channel = async_supabase_client
+        subscriber = RealtimeSubscriber(client=client)
+        await subscriber.subscribe_tickers(
+            venue_id="kucoin",
+            callback=lambda _: None,
+            filter_expr="symbol_id=eq.42",
+        )
+        _, kwargs = channel.on_postgres_changes.call_args
+        assert kwargs["filter"] == "symbol_id=eq.42"
 
     @pytest.mark.asyncio
     async def test_callback_is_wired_to_channel(
@@ -113,3 +129,59 @@ class TestRealtimeSubscriber:
                 venue_id="kucoin",
                 callback=lambda _: None,
             )
+
+    @pytest.mark.asyncio
+    async def test_subscribe_ticker_tracks_pair_in_subscriptions(
+        self,
+        async_supabase_client,
+    ) -> None:
+        client, _ = async_supabase_client
+        subscriber = RealtimeSubscriber(client=client)
+        handle = await subscriber.subscribe_ticker(
+            venue_id="kucoin",
+            symbol="BTC/USDT",
+            callback=lambda _: None,
+        )
+        assert isinstance(handle, SubscriptionHandle)
+        subs = subscriber.subscriptions()
+        assert subs == [
+            TickerSubscription(
+                venue_id="kucoin",
+                symbol="BTC/USDT",
+                channel_id=handle.channel_id,
+            )
+        ]
+
+    @pytest.mark.asyncio
+    async def test_legacy_subscribe_tickers_does_not_populate_subscriptions(
+        self,
+        async_supabase_client,
+    ) -> None:
+        client, _ = async_supabase_client
+        subscriber = RealtimeSubscriber(client=client)
+        await subscriber.subscribe_tickers(
+            venue_id="kucoin",
+            callback=lambda _: None,
+        )
+        assert subscriber.subscriptions() == []
+
+    @pytest.mark.asyncio
+    async def test_close_clears_subscriptions(
+        self,
+        async_supabase_client,
+    ) -> None:
+        client, _ = async_supabase_client
+        subscriber = RealtimeSubscriber(client=client)
+        await subscriber.subscribe_ticker(
+            venue_id="kucoin",
+            symbol="BTC/USDT",
+            callback=lambda _: None,
+        )
+        await subscriber.subscribe_ticker(
+            venue_id="coingecko",
+            symbol="ETH",
+            callback=lambda _: None,
+        )
+        assert len(subscriber.subscriptions()) == 2
+        await subscriber.close()
+        assert subscriber.subscriptions() == []

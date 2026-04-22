@@ -4,6 +4,10 @@ You are continuing the cryptozavr plugin in `/Users/laptop/dev/cryptozavr/`.
 MVP v0.2.0 is shipped. Your job is to ship Phase 1.5: **Realtime + Observability**.
 Target tag: **v0.3.0**.
 
+**MANDATORY FIRST STEP (every iteration):** read `docs/llm-study-guide.md` §3 and match your current sub-task to one of the groups Г1..Г14. Read every link in that group **before** writing code. Do NOT guess FastMCP v3 APIs.
+
+**Working branch:** `feat/phase-1.5-ralph` (already created, already checked out). Do NOT merge to `main`. Push commits to `origin feat/phase-1.5-ralph`. The tag `v0.3.0` MUST be annotated on the feature branch head AFTER all work is complete; a human reviews the branch and merges it — your job ends at "tag pushed, PR-ready".
+
 ## Completion criteria (output `<promise>PHASE_1_5_COMPLETE</promise>` only when ALL are true)
 
 1. `uv run pytest tests/unit tests/contract -m "not integration" -q` passes — **ALL existing + new tests green**.
@@ -19,7 +23,7 @@ Target tag: **v0.3.0**.
      - `post-session-reflection/SKILL.md` — 3-bullet post-session summary skill: what was produced, what decisions were made, what's next.
 4. CHANGELOG.md has a `## [0.3.0]` section describing Phase 1.5.
 5. Git tag `v0.3.0` exists locally AND is pushed to `origin`.
-6. `main` is pushed to `origin`.
+6. Branch `feat/phase-1.5-ralph` is pushed to `origin`. **Do NOT push to `main`.**
 
 ## Constraints (hard)
 
@@ -41,8 +45,8 @@ Target tag: **v0.3.0**.
 6. `feat(plugin): add SessionStart hook that prints venue-health banner`.
 7. `feat(plugin): add venue-debug + post-session-reflection skills`.
 8. Wire everything into `bootstrap.py` + `server.py`. Update `commands/health.md` banner.
-9. `docs: finalize CHANGELOG for v0.3.0 (Phase 1.5)` + `git tag -a v0.3.0 -m "..."` + `git push origin main && git push origin v0.3.0`.
-10. Output `<promise>PHASE_1_5_COMPLETE</promise>` ONLY after step 9 is verified with `git ls-remote --tags origin | grep v0.3.0`.
+9. `docs: finalize CHANGELOG for v0.3.0 (Phase 1.5)` + `git tag -a v0.3.0 -m "..."` + `git push origin feat/phase-1.5-ralph && git push origin v0.3.0`. **Never push to `main`.**
+10. Output `<promise>PHASE_1_5_COMPLETE</promise>` ONLY after step 9 is verified with `git ls-remote --tags origin | grep v0.3.0` AND `git ls-remote --heads origin | grep feat/phase-1.5-ralph`.
 
 ## MetricsDecorator contract (detail)
 

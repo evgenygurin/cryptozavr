@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from cryptozavr.application.services.market_analyzer import AnalysisReport
 from cryptozavr.application.strategies.base import AnalysisResult
@@ -321,12 +321,101 @@ class CategoryDTO(BaseModel):
     def from_provider(cls, raw: dict[str, Any]) -> CategoryDTO:
         mc = raw.get("market_cap")
         mc_change = raw.get("market_cap_change_24h")
+        raw_id = raw.get("category_id") or raw.get("id") or ""
+        raw_name = raw.get("name") or raw_id or "unknown"
         return cls(
-            id=str(raw["category_id"]),
-            name=str(raw["name"]),
+            id=str(raw_id),
+            name=str(raw_name),
             market_cap=Decimal(str(mc)) if mc is not None else None,
             market_cap_change_24h_pct=(Decimal(str(mc_change)) if mc_change is not None else None),
         )
+
+
+class VenuesListDTO(BaseModel):
+    """Wire-format catalog of supported venue ids."""
+
+    model_config = ConfigDict(frozen=True)
+
+    venues: list[str]
+
+
+class SymbolsListDTO(BaseModel):
+    """Wire-format symbols-per-venue lookup."""
+
+    model_config = ConfigDict(frozen=True)
+
+    venue: str
+    symbols: list[SymbolDTO]
+    error: str | None = None
+
+    @model_validator(mode="after")
+    def _no_partial_success(self) -> SymbolsListDTO:
+        if self.error is not None and self.symbols:
+            raise ValueError(
+                "SymbolsListDTO: error is set but symbols is not empty — nonsense state"
+            )
+        return self
+
+
+class TrendingListDTO(BaseModel):
+    """Wire-format trending assets list (CoinGecko)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    assets: list[TrendingAssetDTO]
+    error: str | None = None
+
+    @model_validator(mode="after")
+    def _no_partial_success(self) -> TrendingListDTO:
+        if self.error is not None and self.assets:
+            raise ValueError(
+                "TrendingListDTO: error is set but assets is not empty — nonsense state"
+            )
+        return self
+
+
+class CategoriesListDTO(BaseModel):
+    """Wire-format CoinGecko market categories list."""
+
+    model_config = ConfigDict(frozen=True)
+
+    categories: list[CategoryDTO]
+    error: str | None = None
+
+    @model_validator(mode="after")
+    def _no_partial_success(self) -> CategoriesListDTO:
+        if self.error is not None and self.categories:
+            raise ValueError(
+                "CategoriesListDTO: error is set but categories is not empty — nonsense state"
+            )
+        return self
+
+
+class VenueHealthEntryDTO(BaseModel):
+    """Per-venue health entry for the list tool / banner."""
+
+    model_config = ConfigDict(frozen=True)
+
+    venue: str
+    state: str
+    last_checked_ms: int | None = None
+
+
+class VenueHealthDTO(BaseModel):
+    """Wire-format venue health snapshot."""
+
+    model_config = ConfigDict(frozen=True)
+
+    venues: list[VenueHealthEntryDTO]
+
+    @model_validator(mode="after")
+    def _venues_unique(self) -> VenueHealthDTO:
+        seen: set[str] = set()
+        for entry in self.venues:
+            if entry.venue in seen:
+                raise ValueError(f"VenueHealthDTO.venues must be unique, duplicate {entry.venue!r}")
+            seen.add(entry.venue)
+        return self
 
 
 def _json_friendly(value: Any) -> Any:

@@ -7,6 +7,192 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — Phase 1.5 follow-up
+
+- **`get_trades` now works end-to-end**: `CCXTProvider` overrides
+  `_fetch_trades_raw` / `_normalize_trades` on top of a new
+  `CCXTAdapter.trades_to_domain`. Previously fell through to
+  `BaseProvider`'s `NotImplementedError("trades not implemented for
+  this provider")`.
+- **KuCoin order-book depth normalisation**: `CCXTProvider._snap_order_book_depth`
+  collapses any requested depth to `{20, 100}` (the only values CCXT
+  accepts for `kucoin.fetchOrderBook`). Previously a live call with
+  `depth=5` or `depth=50` failed with
+  `kucoin fetchOrderBook() limit argument must be 20 or 100`.
+- **Version drift resolved**: `pyproject.toml`, `src/cryptozavr/__init__.py`,
+  `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` all bumped
+  to `0.3.0` to match the git tag and CHANGELOG. Tests now read
+  `cryptozavr.__version__` instead of hard-coding the literal.
+- **`cryptozavr://categories` resource fixed**: `CoinGeckoAdapter.categories_to_list`
+  now copies `id` into `category_id` so `CategoryDTO.from_provider` stops raising
+  `KeyError` against the current `/coins/categories` response shape. Previously
+  surfaced as a generic "Error reading resource" (`mask_error_details=True`).
+- **Uniform `application/json` MIME on all resources**: every resource now
+  returns `ResourceResult(ResourceContent(content=json.dumps(...),
+  mime_type="application/json"))` per FastMCP v3 `servers/resources.mdx`
+  §ResourceResult. Previously `cryptozavr://symbols/{venue}` was served as
+  `text/plain` because FastMCP drops the decorator-level `mime_type` hint
+  for URI-template resources; clients can now render the JSON payload
+  natively instead of as an escaped string.
+
+### Added — catalog tools with `structuredContent`
+
+Resource wire format forces `TextResourceContents.text=str`, so any nested
+JSON surfaces with escaped quotes (`\"`) in the raw client view. We added
+Pydantic-DTO tool equivalents so FastMCP v3 auto-populates
+`CallToolResult.structuredContent` — clients render native JSON objects:
+
+- `list_venues() -> VenuesListDTO`
+- `list_symbols(venue) -> SymbolsListDTO`
+- `list_trending() -> TrendingListDTO`
+- `list_categories() -> CategoriesListDTO`
+- `get_venue_health() -> VenueHealthDTO`
+
+Resources stay in place for cacheable / URI-template semantics; the tools
+are the clean-render alternative for interactive views.
+
+### Tests
+- +14 unit tests: `trades_to_domain` (4), provider trades happy-path +
+  unknown-side (2), order-book depth snap parametrised over 6 inputs,
+  CoinGecko categories id→category_id mapping + legacy preservation (2).
+- Unit + contract total: **473 passing** (was 423).
+
+### Review-driven hardening — Important + Suggestion items
+
+**Semantic correctness**
+- `HealthMonitor.mark_probe_performed()` now fires **after** the probe
+  completes, not before — a hung probe can no longer masquerade as
+  "just checked" in `cryptozavr://venue_health`.
+- `TickerSyncWorker.sync_once` fan-out moved from serial-per-subscription
+  to `asyncio.gather(..., return_exceptions=True)`. `CancelledError`
+  is re-raised; other exceptions are logged with `exc_info`.
+- `VenueState.mark_probe_performed` is now monotonic — an older
+  timestamp cannot regress the observable last-seen time.
+
+**Type invariants**
+- `_HistogramStats` rejects unsorted buckets or missing `+inf` at the
+  top; `MetricsRegistry.__init__` validates up-front.
+- `TickerSubscription.channel_id` is validated against
+  `TickerSubscription.make_channel_id(venue_id, symbol)` in `__post_init__`
+  so arbitrary channel strings can no longer leak the abstraction.
+- `SymbolsListDTO` / `TrendingListDTO` / `CategoriesListDTO` added a
+  `success-xor-error` model validator — non-empty list + non-null
+  `error` is no longer representable.
+- `VenueHealthDTO.venues` now enforces venue uniqueness via
+  `@model_validator`.
+- `CategoryDTO.from_provider` falls back safely to `category_id` or
+  `"unknown"` when `name` is absent.
+
+**Silent-failure reduction**
+- `except Exception` branches in `bootstrap._start_background_services`,
+  `_shutdown`, `HealthMonitor._run_probe`, and
+  `cryptozavr://trending` / `cryptozavr://categories` resources now use
+  `logger.exception` for full stack traces, and sanitise exception
+  detail leakage (`str(exc)` → `f"{type(exc).__name__}: upstream unavailable"`).
+
+**Docs**
+- README.md slash-command list aligned to actual 8 commands.
+- `cryptozavr://trending` description clarifies `rank` is a synthetic
+  0-indexed position in the CoinGecko response, not a trading rank.
+
+**Tests added for previously-untested invariants**
+- `test_mark_probe_performed_fires_after_probe_completes`
+- `test_sync_once_runs_subscriptions_concurrently` +
+  `test_sync_once_propagates_cancellation`
+- `test_run_forever_survives_iteration_exception`
+- `test_mark_probe_performed_is_monotonic`
+- `test_rejects_unsorted_buckets` + `test_rejects_missing_inf_bucket`
+- `test_fetch_trades_forwards_since_as_ms`
+- `test_on_ticker_change_extracts_venue_from_record_venue_alias` +
+  `test_on_ticker_change_extracts_venue_from_data_key` +
+  `test_on_ticker_change_extracts_top_level_venue_id`
+- `test_no_clip_code_when_chunk_already_fits`
+- `test_each_endpoint_label_emitted` (parametrised × 5 endpoints)
+- `TestListDTOValidators` (6 tests covering DTO XOR-validators)
+
+## [0.3.0] - 2026-04-22 — **Phase 1.5: Realtime + Observability**
+
+Ships the observability substrate and realtime-driven cache invalidation that
+Phase 2 trading logic will depend on.
+
+**Infrastructure**
+- `MetricsRegistry` — thread-safe in-memory Prometheus-compatible registry.
+  Counters + cumulative-bucket histograms with Prometheus "le" semantics.
+  `snapshot()` returns a JSON-serialisable dict ready for a future text
+  exporter.
+- `MetricsDecorator` — 5th decorator in the provider chain. Classifies every
+  call as `ok` / `rate_limited` / `timeout` / `error`, emits
+  `provider_calls_total{venue,endpoint,outcome}` and
+  `provider_call_duration_ms{venue,endpoint}` with buckets
+  `[50, 100, 250, 500, 1000, 2500, 5000, +Inf]` ms.
+- `ProviderFactory.metrics_registry` — threads a single registry into the
+  decorator chain (Logging > Caching > RateLimit > Retry > Metrics > base).
+- `InMemoryCachingDecorator.invalidate_tickers()` — targeted eviction of
+  ticker cache keys; leaves OHLCV / order book buckets untouched.
+- `RealtimeSubscriber.subscribe_ticker(venue, symbol, callback)` +
+  `subscriptions()` accessor — per-symbol tracking so background workers
+  can enumerate the live set. Legacy `subscribe_tickers(venue)` still works.
+
+**Application**
+- `HealthMonitor` — periodic probe loop (default 60s). For each
+  `VenueId`, runs the supplied `HealthProbe`, updates `VenueState`
+  through `on_request_succeeded` / `on_request_failed` and emits
+  `venue_health_check_total{venue,outcome}`. Idempotent start/stop.
+- `VenueState.last_checked_at_ms` + `mark_probe_performed(now_ms)` —
+  consumed by the new resource to render `last_checked_ms`.
+- `TickerSyncWorker` — background asyncio task (default 30s). Reads
+  `RealtimeSubscriber.subscriptions()` and force-refreshes every ticker
+  through `TickerService`. No-op when there are no subscriptions.
+- `CacheInvalidator` — routes Supabase Realtime `tickers_live` row
+  changes to `providers[venue].invalidate_tickers()`. Exposes
+  `start()` that opens subscribe_tickers channels per venue; failures
+  are logged, not raised.
+
+**MCP surface**
+- Resource `cryptozavr://venue_health` — JSON `{venues: [{venue, state,
+  last_checked_ms}]}`. `state` is `healthy` / `degraded` / `down`
+  (RATE_LIMITED collapses into `degraded`).
+- `/cryptozavr:health` command now also reads this resource and reports
+  per-venue state + last_checked_ms alongside the echo reachability
+  check.
+
+**Lifespan wiring**
+- `build_production_service` assembles MetricsRegistry → HealthMonitor →
+  TickerSyncWorker → CacheInvalidator and starts them inside the
+  lifespan. Start failures are logged per-service so the MCP subprocess
+  still boots when Supabase Realtime is offline. Cleanup stops the
+  background services first (cache invalidator → ticker sync → health
+  monitor) before tearing HTTP / gateway / pg pool.
+- New `LIFESPAN_KEYS`: `metrics_registry`, `health_monitor`,
+  `ticker_sync_worker`, `cache_invalidator`, `venue_states`.
+
+**Plugin surface additions**
+- SessionStart banner now points at `cryptozavr://venue_health`.
+- Skills: `venue-debug` (walks the 5-layer chain to pinpoint whether a
+  venue failure is cache staleness, rate limiting, transport or upstream
+  downtime) and `post-session-reflection` (3-bullet produced / decided /
+  next wrap-up).
+
+### Tests
+- +50 unit tests: MetricsRegistry 5 / MetricsDecorator 7 /
+  HealthMonitor 9 / RealtimeSubscriber 3 / TickerSyncWorker 5 /
+  CacheInvalidator 8 / venue_health resource 5 / cache invalidation 2 /
+  VenueState probe timestamp 2 / ProviderFactory metrics 1 /
+  plus extended test_analytics_service import hoist.
+- Unit + contract total: **423 passing** (was 373).
+
+### Commits (atomic on `feat/phase-1.5-ralph`)
+- `feat(infrastructure): add MetricsDecorator (Prometheus counters/histograms)`
+- `feat(application): add HealthMonitor service`
+- `feat(infrastructure): add per-symbol subscribe_ticker to RealtimeSubscriber`
+- `feat(application): add TickerSyncWorker background task`
+- `feat(mcp): add cryptozavr://venue_health resource`
+- `feat(infrastructure): invalidate ticker cache on realtime tickers_live updates`
+- `feat(plugin): extend SessionStart banner with venue_health hint`
+- `feat(plugin): add venue-debug + post-session-reflection skills`
+- `feat(mcp): wire observability background services into lifespan`
+- `docs(plugin): /cryptozavr:health also reads cryptozavr://venue_health`
+
 ## [0.2.0] - 2026-04-22 — **MVP closure**
 
 ### Added — M3.4 History streaming + SessionExplainer

@@ -11,8 +11,8 @@
     {
       "name": "cryptozavr",
       "source": "./",
-      "version": "0.1.0",
-      "description": "4 MCP tools + agent + skills for disciplined crypto research.",
+      "version": "0.3.0",
+      "description": "16 MCP tools + 4 resources + 2 prompts + agent + 4 skills for disciplined crypto research.",
       "author": {
         "name": "Evgeny Gurin",
         "email": "e.a.gurin@outlook.com"

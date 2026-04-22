@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from cryptozavr.domain.market_data import TradeSide
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.value_objects import Instant, Timeframe
 from cryptozavr.domain.venues import MarketType, VenueId
@@ -107,3 +108,64 @@ class TestOrderBookToDomain:
         assert ob.asks[0].price == Decimal("65001.5")
         assert ob.asks[0].size == Decimal("0.5")
         assert ob.observed_at == Instant.from_ms(1_745_200_800_000)
+
+
+class TestTradesToDomain:
+    def test_happy_path(self, btc_symbol) -> None:
+        raw = [
+            {
+                "id": "t1",
+                "timestamp": 1_745_200_800_000,
+                "side": "buy",
+                "price": 65000.5,
+                "amount": 0.01,
+            },
+            {
+                "id": "t2",
+                "timestamp": 1_745_200_801_000,
+                "side": "sell",
+                "price": 65001.0,
+                "amount": 0.02,
+            },
+        ]
+        trades = CCXTAdapter.trades_to_domain(raw, btc_symbol)
+        assert len(trades) == 2
+        assert trades[0].symbol is btc_symbol
+        assert trades[0].price == Decimal("65000.5")
+        assert trades[0].size == Decimal("0.01")
+        assert trades[0].side is TradeSide.BUY
+        assert trades[0].trade_id == "t1"
+        assert trades[0].executed_at == Instant.from_ms(1_745_200_800_000)
+        assert trades[1].side is TradeSide.SELL
+
+    def test_unknown_side_maps_to_unknown(self, btc_symbol) -> None:
+        raw = [
+            {
+                "id": 42,  # non-string id should still work
+                "timestamp": 1_745_200_800_000,
+                "side": "???",
+                "price": "1.5",
+                "amount": "2",
+            },
+        ]
+        trades = CCXTAdapter.trades_to_domain(raw, btc_symbol)
+        assert trades[0].side is TradeSide.UNKNOWN
+        assert trades[0].trade_id == "42"
+
+    def test_missing_timestamp_falls_back_to_now(self, btc_symbol) -> None:
+        raw = [
+            {
+                "id": None,
+                "timestamp": 0,
+                "side": "buy",
+                "price": 1,
+                "amount": 1,
+            },
+        ]
+        trades = CCXTAdapter.trades_to_domain(raw, btc_symbol)
+        assert trades[0].trade_id is None
+        # executed_at falls back to Instant.now() — just assert positive ms.
+        assert trades[0].executed_at.to_ms() > 0
+
+    def test_empty_list_returns_empty_tuple(self, btc_symbol) -> None:
+        assert CCXTAdapter.trades_to_domain([], btc_symbol) == ()

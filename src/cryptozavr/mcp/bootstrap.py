@@ -1,8 +1,8 @@
 """Production wiring for the MCP server.
 
 Creates infrastructure (HTTP, rate limiters, symbol registry, venue states,
-gateway, providers, realtime subscriber) and yields a single dict keyed
-by `LIFESPAN_KEYS` for Depends(get_xxx_service) injection.
+gateway, providers, realtime subscriber, observability) and yields a single
+dict keyed by `LIFESPAN_KEYS` for Depends(get_xxx_service) injection.
 """
 
 from __future__ import annotations
@@ -14,12 +14,18 @@ from typing import Any
 from supabase import AsyncClient, acreate_client
 
 from cryptozavr.application.services.analytics_service import AnalyticsService
+from cryptozavr.application.services.cache_invalidator import CacheInvalidator
 from cryptozavr.application.services.discovery_service import DiscoveryService
+from cryptozavr.application.services.health_monitor import (
+    HealthMonitor,
+    HealthProbe,
+)
 from cryptozavr.application.services.market_analyzer import MarketAnalyzer
 from cryptozavr.application.services.ohlcv_service import OhlcvService
 from cryptozavr.application.services.order_book_service import OrderBookService
 from cryptozavr.application.services.symbol_resolver import SymbolResolver
 from cryptozavr.application.services.ticker_service import TickerService
+from cryptozavr.application.services.ticker_sync_worker import TickerSyncWorker
 from cryptozavr.application.services.trades_service import TradesService
 from cryptozavr.application.strategies.support_resistance import (
     SupportResistanceStrategy,
@@ -28,6 +34,7 @@ from cryptozavr.application.strategies.volatility import VolatilityRegimeStrateg
 from cryptozavr.application.strategies.vwap import VwapStrategy
 from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.venues import MarketType, VenueId
+from cryptozavr.infrastructure.observability.metrics import MetricsRegistry
 from cryptozavr.infrastructure.providers.factory import ProviderFactory
 from cryptozavr.infrastructure.providers.http import HttpClientRegistry
 from cryptozavr.infrastructure.providers.rate_limiters import (
@@ -46,6 +53,42 @@ from cryptozavr.mcp.settings import Settings
 _LOG = logging.getLogger(__name__)
 
 
+async def _build_background_services(
+    *,
+    providers: dict[VenueId, Any],
+    venue_states: dict[VenueId, VenueState],
+    metrics_registry: MetricsRegistry,
+    ticker_service: TickerService,
+    subscriber: RealtimeSubscriber,
+) -> tuple[HealthMonitor, TickerSyncWorker, CacheInvalidator]:
+    probes: dict[VenueId, HealthProbe] = {
+        venue_id: providers[venue_id].load_markets for venue_id in providers
+    }
+    health_monitor = HealthMonitor(
+        probes=probes,
+        states=venue_states,
+        metrics=metrics_registry,
+    )
+    ticker_sync_worker = TickerSyncWorker(
+        ticker_service=ticker_service,
+        subscriber=subscriber,
+    )
+    cache_invalidator = CacheInvalidator(
+        subscriber=subscriber,
+        providers=providers,
+    )
+    for starter, label in (
+        (health_monitor.start, "health monitor"),
+        (ticker_sync_worker.start, "ticker sync worker"),
+        (cache_invalidator.start, "cache invalidator"),
+    ):
+        try:
+            await starter()
+        except Exception:
+            _LOG.exception("%s failed to start", label)
+    return health_monitor, ticker_sync_worker, cache_invalidator
+
+
 async def build_production_service(
     settings: Settings,
 ) -> tuple[dict[str, Any], Callable[[], Awaitable[None]]]:
@@ -60,6 +103,8 @@ async def build_production_service(
     rate_registry = RateLimiterRegistry()
     rate_registry.register("kucoin", rate_per_sec=30.0, capacity=30)
     rate_registry.register("coingecko", rate_per_sec=0.5, capacity=30)
+
+    metrics_registry = MetricsRegistry()
 
     registry = SymbolRegistry()
     registry.get(
@@ -88,6 +133,7 @@ async def build_production_service(
     factory = ProviderFactory(
         http_registry=http_registry,
         rate_registry=rate_registry,
+        metrics_registry=metrics_registry,
     )
     providers = {
         VenueId.KUCOIN: factory.create_kucoin(
@@ -146,6 +192,18 @@ async def build_production_service(
         coingecko=providers[VenueId.COINGECKO],
     )
 
+    (
+        health_monitor,
+        ticker_sync_worker,
+        cache_invalidator,
+    ) = await _build_background_services(
+        providers=providers,
+        venue_states=venue_states,
+        metrics_registry=metrics_registry,
+        ticker_service=ticker_service,
+        subscriber=subscriber,
+    )
+
     state: dict[str, Any] = {
         LIFESPAN_KEYS.ticker_service: ticker_service,
         LIFESPAN_KEYS.ohlcv_service: ohlcv_service,
@@ -156,25 +214,61 @@ async def build_production_service(
         LIFESPAN_KEYS.registry: registry,
         LIFESPAN_KEYS.symbol_resolver: symbol_resolver,
         LIFESPAN_KEYS.discovery_service: discovery_service,
+        LIFESPAN_KEYS.venue_states: venue_states,
+        LIFESPAN_KEYS.metrics_registry: metrics_registry,
+        LIFESPAN_KEYS.health_monitor: health_monitor,
+        LIFESPAN_KEYS.ticker_sync_worker: ticker_sync_worker,
+        LIFESPAN_KEYS.cache_invalidator: cache_invalidator,
     }
 
     async def cleanup() -> None:
-        _LOG.info("cryptozavr shutting down")
-        try:
-            await subscriber.close()
-        except Exception as exc:
-            _LOG.warning("realtime subscriber close failed: %s", exc)
-        try:
-            await http_registry.close_all()
-        except Exception as exc:
-            _LOG.warning("http registry close failed: %s", exc)
-        try:
-            await gateway.close()
-        except Exception as exc:
-            _LOG.warning("gateway close failed: %s", exc)
-        try:
-            await pg_pool.close()
-        except Exception as exc:
-            _LOG.warning("pg pool close failed: %s", exc)
+        await _shutdown(
+            cache_invalidator=cache_invalidator,
+            ticker_sync_worker=ticker_sync_worker,
+            health_monitor=health_monitor,
+            providers=providers,
+            subscriber=subscriber,
+            http_registry=http_registry,
+            gateway=gateway,
+            pg_pool=pg_pool,
+        )
 
     return state, cleanup
+
+
+async def _shutdown(
+    *,
+    cache_invalidator: CacheInvalidator,
+    ticker_sync_worker: TickerSyncWorker,
+    health_monitor: HealthMonitor,
+    providers: dict[VenueId, Any],
+    subscriber: RealtimeSubscriber,
+    http_registry: HttpClientRegistry,
+    gateway: SupabaseGateway,
+    pg_pool: Any,
+) -> None:
+    _LOG.info("cryptozavr shutting down")
+    for stopper, label in (
+        (cache_invalidator.stop, "cache invalidator"),
+        (ticker_sync_worker.stop, "ticker sync worker"),
+        (health_monitor.stop, "health monitor"),
+    ):
+        try:
+            await stopper()
+        except Exception:
+            _LOG.exception("%s stop failed", label)
+    for venue_id, provider in providers.items():
+        try:
+            await provider.close()
+        except Exception:
+            _LOG.exception("provider %s close failed", venue_id)
+    for closer, label in (
+        (subscriber.close, "realtime subscriber"),
+        (http_registry.close_all, "http registry"),
+        (gateway.close, "gateway"),
+        (pg_pool.close, "pg pool"),
+    ):
+        try:
+            await closer()
+        except Exception:
+            _LOG.exception("%s close failed", label)

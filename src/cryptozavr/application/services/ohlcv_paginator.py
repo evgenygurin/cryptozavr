@@ -83,9 +83,36 @@ class OHLCVPaginator:
             candles = result.series.candles
             if not candles:
                 return  # provider exhausted — stop streaming
-            yield result
+            clipped = self._clip_to_window(result)
+            if clipped.series.candles:
+                yield clipped
             last_opened = candles[-1].opened_at.to_ms()
             next_cursor = last_opened + self._timeframe.to_milliseconds()
             if next_cursor <= cursor_ms:
                 return  # safety guard: no forward progress
             cursor_ms = next_cursor
+
+    def _clip_to_window(self, result: OhlcvFetchResult) -> OhlcvFetchResult:
+        """Drop candles whose `opened_at` falls outside `[since_ms, until_ms)`.
+
+        Providers may ignore `since` when data is older than their retention
+        (returning recent candles instead) or overshoot `until_ms` on the last
+        chunk. The paginator's contract is that consumers see only the window
+        they asked for, so we trim here.
+        """
+        series = result.series
+        kept = tuple(
+            c for c in series.candles if self._since_ms <= c.opened_at.to_ms() < self._until_ms
+        )
+        if len(kept) == len(series.candles):
+            return result
+        return OhlcvFetchResult(
+            series=series.__class__(
+                symbol=series.symbol,
+                timeframe=series.timeframe,
+                candles=kept,
+                range=series.range,
+                quality=series.quality,
+            ),
+            reason_codes=[*list(result.reason_codes), "paginator:clipped_to_window"],
+        )

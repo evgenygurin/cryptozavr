@@ -14,6 +14,8 @@ from cryptozavr.domain.market_data import (
     OHLCVSeries,
     OrderBookSnapshot,
     Ticker,
+    TradeSide,
+    TradeTick,
 )
 from cryptozavr.domain.quality import Confidence, DataQuality, Provenance, Staleness
 from cryptozavr.domain.symbols import Symbol
@@ -107,6 +109,36 @@ class CCXTAdapter:
             observed_at=observed_at,
             quality=_fresh_quality(symbol, endpoint="fetch_order_book"),
         )
+
+    @staticmethod
+    def trades_to_domain(
+        raw: Sequence[Mapping[str, Any]],
+        symbol: Symbol,
+    ) -> tuple[TradeTick, ...]:
+        ticks: list[TradeTick] = []
+        for row in raw:
+            side_str = str(row.get("side", "")).lower()
+            side = (
+                TradeSide.BUY
+                if side_str == "buy"
+                else TradeSide.SELL
+                if side_str == "sell"
+                else TradeSide.UNKNOWN
+            )
+            ts_ms = int(row.get("timestamp") or 0)
+            executed_at = Instant.from_ms(ts_ms) if ts_ms else Instant.now()
+            trade_id = row.get("id")
+            ticks.append(
+                TradeTick(
+                    symbol=symbol,
+                    price=_decimal(row["price"]),
+                    size=_decimal(row["amount"]),
+                    side=side,
+                    executed_at=executed_at,
+                    trade_id=str(trade_id) if trade_id is not None else None,
+                )
+            )
+        return tuple(ticks)
 
 
 def _decimal(value: Any) -> Decimal:

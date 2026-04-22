@@ -39,6 +39,7 @@ class SupportResistanceStrategy:
                 findings={
                     "supports": (),
                     "resistances": (),
+                    "pivots_found": 0,
                     "bars_used": len(series.candles),
                     "window": self._window,
                 },
@@ -72,6 +73,7 @@ class SupportResistanceStrategy:
             findings={
                 "supports": supports,
                 "resistances": resistances,
+                "pivots_found": len(raw_supports) + len(raw_resistances),
                 "bars_used": len(series.candles),
                 "window": self._window,
             },

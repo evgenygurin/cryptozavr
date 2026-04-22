@@ -64,8 +64,19 @@ class CoinGeckoAdapter:
     def categories_to_list(
         raw: Sequence[Mapping[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Map /coins/categories response to plain list of dicts."""
-        return [dict(c) for c in raw]
+        """Map /coins/categories response to plain list of dicts.
+
+        Normalises the identifier field so downstream DTOs see a stable
+        `category_id` key regardless of whether CoinGecko returns `id`
+        (current /coins/categories) or `category_id` (older /categories/list).
+        """
+        result: list[dict[str, Any]] = []
+        for c in raw:
+            row = dict(c)
+            if "category_id" not in row and "id" in row:
+                row["category_id"] = row["id"]
+            result.append(row)
+        return result
 
 
 def _fresh_quality(*, endpoint: str) -> DataQuality:

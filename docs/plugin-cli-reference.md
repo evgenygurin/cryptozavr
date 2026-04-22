@@ -25,7 +25,7 @@
 
 ```text
 cryptozavr@cryptozavr-marketplace
-  Version: 0.1.0
+  Version: 0.3.0
   Scope:   user
   Status:  ✔ enabled
   Source:  directory /Users/laptop/dev/cryptozavr
@@ -95,10 +95,10 @@ claude plugin marketplace add /Users/laptop/dev/cryptozavr
 claude plugin marketplace add evgenygurin/cryptozavr
 
 # GitHub + тег
-claude plugin marketplace add evgenygurin/cryptozavr@v0.1.0
+claude plugin marketplace add evgenygurin/cryptozavr@v0.3.0
 
 # Git URL + тег
-claude plugin marketplace add https://github.com/evgenygurin/cryptozavr.git#v0.1.0
+claude plugin marketplace add https://github.com/evgenygurin/cryptozavr.git#v0.3.0
 
 # Удалить
 claude plugin marketplace remove cryptozavr-marketplace
@@ -166,7 +166,7 @@ export BITBUCKET_TOKEN=xxxxxxxxxxxxxxxxxxxx
 │   ├── cache/                                 # Распакованные плагины: {marketplace}/{plugin}/{version}/
 │   │   └── cryptozavr-marketplace/
 │   │       └── cryptozavr/
-│   │           └── 0.1.0/
+│   │           └── 0.3.0/
 │   │               ├── .claude-plugin/plugin.json
 │   │               ├── skills/
 │   │               ├── commands/
@@ -315,7 +315,7 @@ claude plugin marketplace add evgenygurin/cryptozavr
 claude plugin install cryptozavr@cryptozavr-marketplace
 
 # Или через pinned тег (для воспроизводимости)
-claude plugin marketplace add evgenygurin/cryptozavr@v0.1.0
+claude plugin marketplace add evgenygurin/cryptozavr@v0.3.0
 claude plugin install cryptozavr@cryptozavr-marketplace
 ```
 

@@ -1,7 +1,9 @@
-"""FastMCP server bootstrap: echo + 4 market-data tools.
+"""FastMCP server bootstrap.
 
-Uses FastMCP v3 lifespan (dict-yield) + mask_error_details for
-production safety.
+Wires 16 tools (echo, 4 market-data, resolve_symbol, 4 analytics,
+fetch_ohlcv_history, 5 catalog with structuredContent DTOs),
+4 static resources + 1 URI-template (symbols/{venue}), and 2 prompts
+on a dict-yielding lifespan with `mask_error_details=True`.
 """
 
 from __future__ import annotations
@@ -19,8 +21,10 @@ from cryptozavr import __version__
 from cryptozavr.mcp.bootstrap import build_production_service
 from cryptozavr.mcp.prompts.research import register_prompts
 from cryptozavr.mcp.resources.catalogs import register_resources
+from cryptozavr.mcp.resources.venue_health import register_venue_health_resource
 from cryptozavr.mcp.settings import Settings
 from cryptozavr.mcp.tools.analytics import register_analytics_tools
+from cryptozavr.mcp.tools.catalog import register_catalog_tools
 from cryptozavr.mcp.tools.discovery import register_resolve_symbol_tool
 from cryptozavr.mcp.tools.history import register_fetch_ohlcv_history_tool
 from cryptozavr.mcp.tools.ohlcv import register_ohlcv_tool
@@ -83,8 +87,10 @@ def build_server(settings: Settings) -> FastMCP:
     register_resolve_symbol_tool(mcp)
     register_analytics_tools(mcp)
     register_fetch_ohlcv_history_tool(mcp)
+    register_catalog_tools(mcp)
     register_prompts(mcp)
     register_resources(mcp)
+    register_venue_health_resource(mcp)
     return mcp
 
 
