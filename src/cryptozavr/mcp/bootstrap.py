@@ -26,6 +26,7 @@ from cryptozavr.application.services.health_monitor import (
 from cryptozavr.application.services.market_analyzer import MarketAnalyzer
 from cryptozavr.application.services.ohlcv_service import OhlcvService
 from cryptozavr.application.services.order_book_service import OrderBookService
+from cryptozavr.application.services.paper_ledger_service import PaperLedgerService
 from cryptozavr.application.services.position_watcher import PositionWatcher
 from cryptozavr.application.services.symbol_resolver import SymbolResolver
 from cryptozavr.application.services.ticker_service import TickerService
@@ -40,6 +41,7 @@ from cryptozavr.domain.symbols import SymbolRegistry
 from cryptozavr.domain.venues import MarketType, VenueId
 from cryptozavr.domain.watch import WatchState
 from cryptozavr.infrastructure.observability.metrics import MetricsRegistry
+from cryptozavr.infrastructure.persistence.paper_trade_repo import PaperTradeRepository
 from cryptozavr.infrastructure.persistence.risk_policy_repo import (
     RiskPolicyRepository,
 )
@@ -214,6 +216,14 @@ async def build_production_service(
         registry=watch_registry,
     )
 
+    paper_repo = PaperTradeRepository(pool=pg_pool)
+    paper_ledger = PaperLedgerService(
+        repository=paper_repo,
+        watcher=position_watcher,
+        resolver=symbol_resolver,
+    )
+    paper_bankroll_override: dict[str, Any] = {"value": None}
+
     (
         health_monitor,
         ticker_sync_worker,
@@ -248,7 +258,15 @@ async def build_production_service(
         LIFESPAN_KEYS.ws_provider: ws_provider,
         LIFESPAN_KEYS.position_watcher: position_watcher,
         LIFESPAN_KEYS.watch_registry: watch_registry,
+        LIFESPAN_KEYS.paper_repo: paper_repo,
+        LIFESPAN_KEYS.paper_ledger: paper_ledger,
+        LIFESPAN_KEYS.paper_bankroll_override: paper_bankroll_override,
     }
+
+    try:
+        await paper_ledger.resume_open_watches()
+    except Exception:
+        _LOG.warning("paper_ledger resume_open_watches failed", exc_info=True)
 
     async def cleanup() -> None:
         await _shutdown(

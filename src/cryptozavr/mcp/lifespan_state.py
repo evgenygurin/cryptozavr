@@ -26,6 +26,9 @@ if TYPE_CHECKING:
     from cryptozavr.application.services.order_book_service import (
         OrderBookService,
     )
+    from cryptozavr.application.services.paper_ledger_service import (
+        PaperLedgerService,
+    )
     from cryptozavr.application.services.position_watcher import PositionWatcher
     from cryptozavr.application.services.symbol_resolver import SymbolResolver
     from cryptozavr.application.services.ticker_service import TickerService
@@ -33,6 +36,9 @@ if TYPE_CHECKING:
     from cryptozavr.domain.symbols import SymbolRegistry
     from cryptozavr.domain.venues import VenueId
     from cryptozavr.domain.watch import WatchState
+    from cryptozavr.infrastructure.persistence.paper_trade_repo import (
+        PaperTradeRepository,
+    )
     from cryptozavr.infrastructure.persistence.risk_policy_repo import (
         RiskPolicyRepository,
     )
@@ -69,6 +75,9 @@ class _LifespanKeys:
     ws_provider: str = "ws_provider"
     position_watcher: str = "position_watcher"
     watch_registry: str = "watch_registry"
+    paper_repo: str = "paper_repo"
+    paper_ledger: str = "paper_ledger"
+    paper_bankroll_override: str = "paper_bankroll_override"
 
 
 LIFESPAN_KEYS = _LifespanKeys()
@@ -160,4 +169,25 @@ def get_ws_provider(ctx: Any = _CTX) -> KucoinWsProvider:
     return cast(
         "KucoinWsProvider",
         ctx.lifespan_context[LIFESPAN_KEYS.ws_provider],
+    )
+
+
+def get_paper_ledger(ctx: Any = _CTX) -> PaperLedgerService:
+    return cast(
+        "PaperLedgerService",
+        ctx.lifespan_context[LIFESPAN_KEYS.paper_ledger],
+    )
+
+
+def get_paper_repo(ctx: Any = _CTX) -> PaperTradeRepository:
+    return cast(
+        "PaperTradeRepository",
+        ctx.lifespan_context[LIFESPAN_KEYS.paper_repo],
+    )
+
+
+def get_paper_bankroll_override(ctx: Any = _CTX) -> dict[str, Any]:
+    return cast(
+        "dict[str, Any]",
+        ctx.lifespan_context[LIFESPAN_KEYS.paper_bankroll_override],
     )

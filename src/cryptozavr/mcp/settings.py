@@ -6,6 +6,7 @@ Loaded once at server startup.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from enum import StrEnum
 from typing import Literal
 
@@ -58,4 +59,8 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO",
         alias="CRYPTOZAVR_LOG_LEVEL",
+    )
+    paper_bankroll_initial: Decimal = Field(
+        default=Decimal("10000"),
+        description="Starting paper-trading bankroll in quote currency (USDT).",
     )
