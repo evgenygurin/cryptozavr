@@ -35,6 +35,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for URI-template resources; clients can now render the JSON payload
   natively instead of as an escaped string.
 
+### Added — catalog tools with `structuredContent`
+
+Resource wire format forces `TextResourceContents.text=str`, so any nested
+JSON surfaces with escaped quotes (`\"`) in the raw client view. We added
+Pydantic-DTO tool equivalents so FastMCP v3 auto-populates
+`CallToolResult.structuredContent` — clients render native JSON objects:
+
+- `list_venues() -> VenuesListDTO`
+- `list_symbols(venue) -> SymbolsListDTO`
+- `list_trending() -> TrendingListDTO`
+- `list_categories() -> CategoriesListDTO`
+- `get_venue_health() -> VenueHealthDTO`
+
+Resources stay in place for cacheable / URI-template semantics; the tools
+are the clean-render alternative for interactive views.
+
 ### Tests
 - +14 unit tests: `trades_to_domain` (4), provider trades happy-path +
   unknown-side (2), order-book depth snap parametrised over 6 inputs,
