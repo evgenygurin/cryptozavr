@@ -1,17 +1,8 @@
-"""Six Phase 3 risk tools wired over RiskEngine + RiskPolicyRepository + KillSwitch.
-
-Tools:
-
-  1. set_risk_policy           — persist + auto-activate a RiskPolicy (DB)
-  2. get_risk_policy           — read the currently active policy
-  3. evaluate_trade_intent     — run the chain with the active policy
-  4. simulate_risk_check       — evaluate with an optional override policy
-  5. engage_kill_switch        — flip the runtime gate (restart-reset)
-  6. disengage_kill_switch     — release the gate
+"""MCP tool module — six risk tools wired over RiskEngine + repo + KillSwitch.
 
 Payloads arrive as raw `dict[str, Any]` so malformed input surfaces as a
 structured `error` envelope instead of a pydantic ValidationError at
-dispatch time (same pattern as the Phase 2 compute tools).
+dispatch time.
 """
 
 from __future__ import annotations
@@ -81,12 +72,11 @@ async def _set_risk_policy_impl(
             error=f"policy domain invalid: {exc}",
         )
     try:
-        policy_id = await repo.save(domain_policy)
-        await repo.activate(policy_id)
+        policy_id = await repo.save_and_activate(domain_policy)
     except Exception as exc:
         # Broad except: pg pool / network / trigger failures all surface as
         # a single wire-format error line; traceback goes to stderr via logging.
-        _LOGGER.exception("risk_policy repo save/activate crashed: %s", exc)
+        _LOGGER.exception("risk_policy repo save_and_activate crashed: %s", exc)
         await ctx.error(f"set_risk_policy repo failure: {type(exc).__name__}")
         return SetRiskPolicyResponse(
             id=None,
@@ -162,7 +152,14 @@ async def _evaluate_trade_intent_impl(
         return EvaluateTradeIntentResponse(
             error="no active risk policy — set one via set_risk_policy",
         )
-    decision = engine.evaluate(domain_intent, row.policy)
+    try:
+        decision = engine.evaluate(domain_intent, row.policy)
+    except Exception as exc:
+        _LOGGER.exception("RiskEngine.evaluate crashed: %s", exc)
+        await ctx.error(f"evaluate_trade_intent engine failure: {type(exc).__name__}")
+        return EvaluateTradeIntentResponse(
+            error=f"engine error: {type(exc).__name__}: {exc}",
+        )
     return EvaluateTradeIntentResponse(decision=RiskDecisionDTO.from_domain(decision))
 
 
@@ -220,7 +217,14 @@ async def _simulate_risk_check_impl(
     if policy_error is not None:
         return SimulateRiskCheckResponse(error=policy_error)
     assert domain_policy is not None  # coherence: no error → policy present
-    decision = engine.evaluate(domain_intent, domain_policy)
+    try:
+        decision = engine.evaluate(domain_intent, domain_policy)
+    except Exception as exc:
+        _LOGGER.exception("RiskEngine.evaluate (simulate) crashed: %s", exc)
+        await ctx.error(f"simulate_risk_check engine failure: {type(exc).__name__}")
+        return SimulateRiskCheckResponse(
+            error=f"engine error: {type(exc).__name__}: {exc}",
+        )
     return SimulateRiskCheckResponse(
         decision=RiskDecisionDTO.from_domain(decision),
         policy_source=policy_source,
@@ -258,17 +262,17 @@ async def _disengage_kill_switch_impl(
 
 
 def register_risk_tools(mcp: FastMCP) -> None:
-    """Attach the six Phase 3 risk tools to `mcp`."""
+    """Attach the six risk tools to `mcp`."""
 
     @mcp.tool(
         name="set_risk_policy",
         description=(
             "Persist and activate a RiskPolicy. Inserts a new row; idempotent "
             "by BLAKE2b content_hash (re-saving the same policy returns the "
-            "existing id). Auto-activates the inserted policy — any previously "
-            "active policy is deactivated in the same transaction. "
-            "Note: max_daily_loss_pct is accepted and stored but not yet "
-            "enforced — its handler lands in a follow-up."
+            "existing id). Save + activation run in one transaction — partial "
+            "failure never leaves an orphan row. "
+            "Note: max_daily_loss_pct is currently stored but not enforced by "
+            "any handler."
         ),
         tags={"risk", "phase-3"},
         timeout=30.0,
@@ -373,8 +377,7 @@ def register_risk_tools(mcp: FastMCP) -> None:
         description=(
             "Engage the runtime kill switch. All subsequent evaluate / "
             "simulate calls will return a DENY decision with a KillSwitch "
-            "violation. State is runtime-only in MVP — server restart "
-            "disengages."
+            "violation. State is runtime-only — server restart disengages."
         ),
         tags={"risk", "phase-3"},
         timeout=30.0,

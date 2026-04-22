@@ -192,6 +192,47 @@ class TestActivate:
             await repo.activate(uuid4())
 
 
+# ---------------------------- save_and_activate ------------------------------
+
+
+class TestSaveAndActivate:
+    @pytest.mark.asyncio
+    async def test_happy_path_runs_insert_plus_two_updates_in_transaction(self) -> None:
+        policy = _valid_policy()
+        new_id = uuid4()
+        conn = _conn_with_txn()
+        conn.fetchrow = AsyncMock(return_value={"id": new_id})
+        conn.execute = AsyncMock(side_effect=["UPDATE 0", "UPDATE 1"])
+        pool = _make_pool_with_conn(conn)
+        repo = RiskPolicyRepository(pool=pool)
+
+        result = await repo.save_and_activate(policy)
+        assert result == new_id
+        # One INSERT + two UPDATEs, all against the same connection under
+        # a single transaction context.
+        assert conn.fetchrow.await_count == 1
+        assert conn.execute.await_count == 2
+        deactivate_sql = conn.execute.await_args_list[0].args[0]
+        activate_sql = conn.execute.await_args_list[1].args[0]
+        assert "is_active = false" in deactivate_sql
+        assert "is_active = true" in activate_sql
+
+    @pytest.mark.asyncio
+    async def test_raises_lookup_error_when_inserted_id_missing_on_activate(
+        self,
+    ) -> None:
+        # Impossible in practice (we just inserted), but defensively covered.
+        policy = _valid_policy()
+        conn = _conn_with_txn()
+        conn.fetchrow = AsyncMock(return_value={"id": uuid4()})
+        conn.execute = AsyncMock(side_effect=["UPDATE 0", "UPDATE 0"])
+        pool = _make_pool_with_conn(conn)
+        repo = RiskPolicyRepository(pool=pool)
+
+        with pytest.raises(LookupError):
+            await repo.save_and_activate(policy)
+
+
 # ---------------------------- get_active -------------------------------------
 
 

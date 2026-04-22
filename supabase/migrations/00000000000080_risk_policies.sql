@@ -1,6 +1,5 @@
 -- Declarative risk policies — insert-only history, one active row.
--- Mirrors cryptozavr.strategy_specs (Phase 2E-1) for persistence patterns:
--- jsonb spec + BLAKE2b content_hash uniqueness → idempotent save.
+-- jsonb policy + BLAKE2b content_hash uniqueness → idempotent save.
 -- Partial unique index on is_active = true enforces the "exactly one active
 -- row at a time" invariant at the DB layer; the repository transaction only
 -- has to deactivate-then-activate without extra locking.

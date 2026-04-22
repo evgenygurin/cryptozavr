@@ -1,10 +1,4 @@
-"""Risk-layer domain types: TradeIntent / Violation / RiskDecision + enums.
-
-RiskEngine (application layer) consumes a TradeIntent, runs the handler
-chain, and emits a RiskDecision. Violation is the atomic finding. All
-types are frozen + slotted; `__post_init__` enforces cross-field invariants
-that a simple Field-level constraint cannot express.
-"""
+"""Risk-layer domain types: TradeIntent / Violation / RiskDecision + enums."""
 
 from __future__ import annotations
 

@@ -1,11 +1,9 @@
 """RiskPolicyRepository — asyncpg-backed persistence for risk_policies.
 
-Mirrors StrategySpecRepository (Phase 2E-1): canonical JSON + BLAKE2b
-content_hash dedupes repeat saves. Insert-only history, partial unique
-index on `is_active = true` guarantees exactly one active row. The
-`activate` call runs inside a transaction so the deactivate-then-activate
-transition is atomic; the trigger on the table stamps `activated_at :=
-now()` on the 0→1 is_active flip.
+Canonical JSON + BLAKE2b content_hash dedupes repeat saves. Insert-only
+history; partial unique index on `is_active = true` guarantees exactly
+one active row. Activation is transactional — the table trigger stamps
+`activated_at` on the 0→1 is_active flip.
 """
 
 from __future__ import annotations
@@ -18,6 +16,7 @@ from typing import Any
 from uuid import UUID
 
 import asyncpg
+from pydantic import ValidationError
 
 from cryptozavr.application.risk.risk_policy import RiskPolicy
 
@@ -86,6 +85,43 @@ class RiskPolicyRepository:
                 f"RiskPolicyRepository.activate: id {policy_id} not found",
             )
 
+    async def save_and_activate(self, policy: RiskPolicy) -> UUID:
+        """Atomic insert-or-upsert + activation in one transaction.
+
+        Prevents orphan rows if the activate phase fails after save. If the
+        policy already exists (content_hash collision), returns the existing
+        id and still activates it.
+        """
+        canonical = _canonical_policy_json(policy)
+        chash = _content_hash(canonical)
+        async with self._pool.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow(
+                """
+                insert into cryptozavr.risk_policies (policy_json, content_hash)
+                values ($1::jsonb, $2)
+                on conflict (content_hash) do update
+                  set content_hash = excluded.content_hash
+                returning id
+                """,
+                canonical,
+                chash,
+            )
+            assert row is not None, "upsert must return a row"
+            policy_id = _as_uuid(row["id"])
+            await conn.execute(
+                "update cryptozavr.risk_policies set is_active = false where is_active = true",
+            )
+            result: str = await conn.execute(
+                "update cryptozavr.risk_policies set is_active = true where id = $1",
+                policy_id,
+            )
+        if result != "UPDATE 1":
+            raise LookupError(
+                f"RiskPolicyRepository.save_and_activate: id {policy_id} missing "
+                "after insert (should be impossible)",
+            )
+        return policy_id
+
     async def get_active(self) -> RiskPolicyRow | None:
         """Return the single active row or None."""
         async with self._pool.acquire() as conn:
@@ -135,17 +171,25 @@ def _row_to_domain(row: Any) -> RiskPolicyRow:
 
     asyncpg returns jsonb either as a str (no codec registered) or as an
     already-parsed dict depending on server setup; we normalise both.
+    On corrupt jsonb / mismatched schema, the row id is surfaced so
+    operators can locate and fix the offending record.
     """
-    raw = row["policy_json"]
-    policy_dict = json.loads(raw) if isinstance(raw, str) else raw
-    activated_at = row["activated_at"]
-    return RiskPolicyRow(
-        id=_as_uuid(row["id"]),
-        policy=RiskPolicy.model_validate(policy_dict),
-        is_active=bool(row["is_active"]),
-        created_at_ms=_dt_to_ms(row["created_at"]),
-        activated_at_ms=_dt_to_ms(activated_at) if activated_at is not None else None,
-    )
+    row_id = row["id"]
+    try:
+        raw = row["policy_json"]
+        policy_dict = json.loads(raw) if isinstance(raw, str) else raw
+        activated_at = row["activated_at"]
+        return RiskPolicyRow(
+            id=_as_uuid(row_id),
+            policy=RiskPolicy.model_validate(policy_dict),
+            is_active=bool(row["is_active"]),
+            created_at_ms=_dt_to_ms(row["created_at"]),
+            activated_at_ms=_dt_to_ms(activated_at) if activated_at is not None else None,
+        )
+    except (json.JSONDecodeError, ValidationError) as exc:
+        raise RuntimeError(
+            f"corrupt risk_policies row id={row_id}: {type(exc).__name__}: {exc}",
+        ) from exc
 
 
 def _dt_to_ms(dt: datetime) -> int:

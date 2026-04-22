@@ -199,6 +199,12 @@ def test_aggregate_two_warns_is_warn() -> None:
     assert _aggregate_status([_viol(Severity.WARN), _viol(Severity.WARN)]) == RiskStatus.WARN
 
 
+def test_aggregate_warn_plus_deny_is_deny() -> None:
+    # Mixed severities resolve to DENY regardless of order — any DENY wins.
+    assert _aggregate_status([_viol(Severity.WARN), _viol(Severity.DENY)]) == RiskStatus.DENY
+    assert _aggregate_status([_viol(Severity.DENY), _viol(Severity.WARN)]) == RiskStatus.DENY
+
+
 # --- evaluated_at_ms + type invariants --------------------------------------
 
 

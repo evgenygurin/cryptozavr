@@ -171,6 +171,7 @@ def _mock_repo(
     save_return: object | None = None,
     save_side_effect: BaseException | None = None,
     activate_side_effect: BaseException | None = None,
+    save_and_activate_side_effect: BaseException | None = None,
     get_active_return: RiskPolicyRow | None = None,
     get_active_side_effect: BaseException | None = None,
 ) -> MagicMock:
@@ -183,6 +184,15 @@ def _mock_repo(
         repo.activate = AsyncMock(side_effect=activate_side_effect)
     else:
         repo.activate = AsyncMock(return_value=None)
+    # `save_and_activate` defaults to the same return value as `save` for
+    # happy-path tests. Explicit side_effect overrides surface the partial-
+    # failure path (pg drops between save + activate).
+    if save_and_activate_side_effect is not None:
+        repo.save_and_activate = AsyncMock(side_effect=save_and_activate_side_effect)
+    elif save_side_effect is not None:
+        repo.save_and_activate = AsyncMock(side_effect=save_side_effect)
+    else:
+        repo.save_and_activate = AsyncMock(return_value=save_return)
     if get_active_side_effect is not None:
         repo.get_active = AsyncMock(side_effect=get_active_side_effect)
     else:
@@ -231,8 +241,9 @@ class TestSetRiskPolicy:
         assert payload["id"] == str(new_id)
         assert payload["note"] == "saved and activated"
         assert payload["error"] is None
-        repo.save.assert_awaited_once()
-        repo.activate.assert_awaited_once_with(new_id)
+        repo.save_and_activate.assert_awaited_once()
+        repo.save.assert_not_awaited()
+        repo.activate.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_missing_field_returns_error_with_location(self) -> None:
@@ -249,11 +260,11 @@ class TestSetRiskPolicy:
         assert payload["id"] is None
         assert payload["error"] is not None
         assert "max_leverage" in payload["error"]
-        repo.save.assert_not_awaited()
+        repo.save_and_activate.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_repo_failure_surfaces_in_error(self) -> None:
-        repo = _mock_repo(save_side_effect=RuntimeError("pg down"))
+        repo = _mock_repo(save_and_activate_side_effect=RuntimeError("pg down"))
         mcp = _build_server(repo=repo)
         async with Client(mcp) as client:
             result = await client.call_tool(

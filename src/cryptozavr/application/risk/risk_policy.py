@@ -1,10 +1,4 @@
-"""Pydantic DSL for RiskPolicy: 5 limits + per-limit severity config.
-
-Frozen models (ConfigDict(frozen=true)). Per-limit Field constraints handle
-`value > 0`; the aggregate `@model_validator(mode="after")` enforces
-cross-limit invariants (pct upper bound, leverage floor) that Field cannot
-express on the nested LimitDecimal alone.
-"""
+"""Pydantic DSL for RiskPolicy — 5 limits with per-limit severity config."""
 
 from __future__ import annotations
 

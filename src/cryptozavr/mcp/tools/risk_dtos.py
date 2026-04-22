@@ -1,12 +1,12 @@
-"""Wire-format DTOs for the six Phase 3 risk tools.
+"""Wire-format DTOs for the risk MCP tools.
 
 Mirrors domain types (TradeIntent / Violation / RiskDecision) + the
-application RiskPolicy DSL with primitive-typed Pydantic models so MCP
-clients can build requests and consume responses as plain JSON.
+RiskPolicy DSL with primitive-typed Pydantic models so MCP clients can
+build requests and consume responses as plain JSON.
 
 Each response envelope carries a `model_validator(mode="after")` coherence
 check so the server cannot emit nonsensical pairs like (error, decision)
-or (success, no payload). This mirrors the Phase 2 strategy DTO pattern.
+or (success, no payload).
 """
 
 from __future__ import annotations
