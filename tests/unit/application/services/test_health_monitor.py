@@ -165,6 +165,23 @@ async def test_start_and_stop_runs_at_least_one_iteration() -> None:
 
 
 @pytest.mark.asyncio
+async def test_check_once_updates_last_checked_at() -> None:
+    registry = MetricsRegistry()
+    state = VenueState(VenueId.KUCOIN)
+    assert state.last_checked_at_ms is None
+    monitor = HealthMonitor(
+        probes={VenueId.KUCOIN: _ok_probe()},
+        states={VenueId.KUCOIN: state},
+        metrics=registry,
+    )
+
+    await monitor.check_once()
+
+    assert state.last_checked_at_ms is not None
+    assert state.last_checked_at_ms > 0
+
+
+@pytest.mark.asyncio
 async def test_stop_is_idempotent() -> None:
     monitor = HealthMonitor(
         probes={},

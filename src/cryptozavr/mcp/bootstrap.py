@@ -156,6 +156,7 @@ async def build_production_service(
         LIFESPAN_KEYS.registry: registry,
         LIFESPAN_KEYS.symbol_resolver: symbol_resolver,
         LIFESPAN_KEYS.discovery_service: discovery_service,
+        LIFESPAN_KEYS.venue_states: venue_states,
     }
 
     async def cleanup() -> None:

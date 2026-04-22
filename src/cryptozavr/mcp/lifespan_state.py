@@ -28,6 +28,8 @@ if TYPE_CHECKING:
     from cryptozavr.application.services.ticker_service import TickerService
     from cryptozavr.application.services.trades_service import TradesService
     from cryptozavr.domain.symbols import SymbolRegistry
+    from cryptozavr.domain.venues import VenueId
+    from cryptozavr.infrastructure.providers.state.venue_state import VenueState
     from cryptozavr.infrastructure.supabase.realtime import RealtimeSubscriber
 
 
@@ -44,6 +46,7 @@ class _LifespanKeys:
     symbol_resolver: str = "symbol_resolver"
     discovery_service: str = "discovery_service"
     registry: str = "registry"
+    venue_states: str = "venue_states"
 
 
 LIFESPAN_KEYS = _LifespanKeys()
@@ -86,3 +89,10 @@ def get_discovery_service(ctx: Any = _CTX) -> DiscoveryService:
 
 def get_registry(ctx: Any = _CTX) -> SymbolRegistry:
     return cast("SymbolRegistry", ctx.lifespan_context[LIFESPAN_KEYS.registry])
+
+
+def get_venue_states(ctx: Any = _CTX) -> dict[VenueId, VenueState]:
+    return cast(
+        "dict[VenueId, VenueState]",
+        ctx.lifespan_context[LIFESPAN_KEYS.venue_states],
+    )

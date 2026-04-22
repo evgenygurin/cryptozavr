@@ -46,6 +46,17 @@ class TestVenueState:
         state.transition_to(VenueStateKind.DOWN)
         assert state.kind == VenueStateKind.DOWN
 
+    def test_last_checked_at_ms_starts_none(self) -> None:
+        state = VenueState(venue_id=VenueId.KUCOIN)
+        assert state.last_checked_at_ms is None
+
+    def test_mark_probe_performed_updates_timestamp(self) -> None:
+        state = VenueState(venue_id=VenueId.KUCOIN)
+        state.mark_probe_performed(1_700_000_000_000)
+        assert state.last_checked_at_ms == 1_700_000_000_000
+        state.mark_probe_performed(1_700_000_060_000)
+        assert state.last_checked_at_ms == 1_700_000_060_000
+
 
 class TestTransitions:
     def test_healthy_degrades_after_3_errors(self) -> None:

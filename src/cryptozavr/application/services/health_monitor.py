@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 
 from cryptozavr.domain.exceptions import RateLimitExceededError
@@ -54,6 +55,8 @@ class HealthMonitor:
 
     async def _run_probe(self, venue_id: VenueId, probe: HealthProbe) -> str:
         state = self._states.get(venue_id)
+        if state is not None:
+            state.mark_probe_performed(int(time.time() * 1000))
         try:
             await probe()
         except RateLimitExceededError as exc:

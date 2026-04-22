@@ -36,10 +36,20 @@ class VenueState:
             )
         self._handler: StateHandler = cls()
         self._ctx = _TransitionContext(error_count=0, success_streak=0)
+        self._last_checked_at_ms: int | None = None
 
     @property
     def kind(self) -> VenueStateKind:
         return self._handler.kind
+
+    @property
+    def last_checked_at_ms(self) -> int | None:
+        """Unix timestamp (ms) of the last HealthMonitor probe for this venue."""
+        return self._last_checked_at_ms
+
+    def mark_probe_performed(self, now_ms: int) -> None:
+        """Record that a health probe was just executed (sets last_checked_at_ms)."""
+        self._last_checked_at_ms = now_ms
 
     def require_operational(self) -> None:
         self._handler.check_operational()
