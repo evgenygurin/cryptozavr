@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Phase 2C — Post-backtest analytics Visitor pattern
+
+- `BacktestReport` DTO (`BacktestTrade` + `EquityPoint` + `TradeSide`) with
+  chronological + positive-value invariants; `ValidationError` on bad input.
+- `BacktestVisitor` Protocol (`runtime_checkable`, generic over return type)
+  + 5 concrete visitors:
+  - `TotalReturnVisitor` → `Decimal`
+  - `WinRateVisitor` → `Decimal` in `[0, 1]`
+  - `ProfitFactorVisitor` → `Decimal | None` (`None` when gross loss is zero)
+  - `MaxDrawdownVisitor` → `Decimal` in `[0, 1]`
+  - `SharpeRatioVisitor` → `Decimal` (configurable `annualisation_factor`
+    and `risk_free_rate`)
+- `BacktestAnalyticsService` composer — preserves visitor order, rejects
+  duplicate visitor names at construction, propagates visitor exceptions.
+- Hypothesis property-based tests for `MaxDrawdownVisitor`
+  (monotone-increasing curve → 0, range `[0, 1]` always) and
+  `SharpeRatioVisitor` (finiteness on bounded curves).
+- +38 unit tests, all green.
+
 ## [0.3.1] - 2026-04-22 — **Phase 1.5 verification follow-up**
 
 Full semantic-invariant sweep of the v0.3.0 surface surfaced 19 issues
