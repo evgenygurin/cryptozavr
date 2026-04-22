@@ -57,7 +57,7 @@ def test_name() -> None:
         st.decimals(min_value="1", max_value="1000000", allow_nan=False, allow_infinity=False),
         min_size=1,
         max_size=50,
-    ).map(lambda xs: sorted(xs))
+    ).map(sorted)
 )
 def test_property_monotone_increasing_curve_has_zero_drawdown(
     values: list[Decimal],
