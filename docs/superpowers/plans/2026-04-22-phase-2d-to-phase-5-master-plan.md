@@ -124,10 +124,10 @@ brainstorming — scope уже зафиксирован в MVP spec §11.3.
 
 ### Phase 2 closure — heavy review + PR + user merge
 
-- [ ] Heavy review: full `requesting-code-review` subagent против всего diff
-- [ ] Fix issues (если есть)
-- [ ] `superpowers:finishing-a-development-branch` → PR → user approves merge
-- [ ] **Phase 2 ✓ merged**
+- [x] Heavy review: full `requesting-code-review` subagent (APPROVE WITH FOLLOW-UPS → timeouts landed in 53049b0)
+- [x] pr-review-toolkit 5-agent pass → polish commit da19936 (docstrings / validators / logging / chop-test)
+- [x] PR #8 opened + merged (merge commit 433c73c)
+- [x] **Phase 2 ✓ merged**
 
 **Budget estimate:** 5 subagent dispatches (4 units + 1 heavy review).
 
