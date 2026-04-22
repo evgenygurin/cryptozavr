@@ -22,6 +22,7 @@ from cryptozavr import __version__
 from cryptozavr.mcp.bootstrap import build_production_service
 from cryptozavr.mcp.prompts.research import register_prompts
 from cryptozavr.mcp.resources.catalogs import register_resources
+from cryptozavr.mcp.resources.paper import register_paper_resources
 from cryptozavr.mcp.resources.venue_health import register_venue_health_resource
 from cryptozavr.mcp.settings import Settings
 from cryptozavr.mcp.tools.analytics import register_analytics_tools
@@ -103,6 +104,7 @@ def build_server(settings: Settings) -> FastMCP:
     register_paper_tools(mcp, bankroll_initial=settings.paper_bankroll_initial)
     register_prompts(mcp)
     register_resources(mcp)
+    register_paper_resources(mcp, bankroll_initial=settings.paper_bankroll_initial)
     register_venue_health_resource(mcp)
     # MCP wire format serialises @mcp.resource payloads as
     # TextResourceContents.text (a JSON string, always re-escaped on the
