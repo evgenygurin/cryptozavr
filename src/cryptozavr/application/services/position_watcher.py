@@ -17,7 +17,7 @@ from cryptozavr.domain.watch import EventType, WatchEvent, WatchSide, WatchState
 if TYPE_CHECKING:
     from cryptozavr.domain.symbols import Symbol
 
-_APPROACH_BAND_PCT = Decimal("0.005")  # 0.5%
+_APPROACH_BAND_RATIO = Decimal("0.2")  # 20% of entry↔level distance
 
 
 class EventDetector:
@@ -27,6 +27,10 @@ class EventDetector:
     list and take priority. Non-terminal events are deduplicated against
     state._fired_non_terminal — callers are responsible for updating
     that set.
+
+    Approach bands scale with entry↔level distance (20%), not with the
+    level price — so on a tight stop the band stays narrow and the
+    approach event only fires when the price really closes in.
     """
 
     @staticmethod
@@ -41,11 +45,11 @@ class EventDetector:
 
         events: list[WatchEvent] = []
         if EventType.PRICE_APPROACHES_STOP not in state._fired_non_terminal and _is_near_stop(
-            state.side, price, state.stop
+            state, price
         ):
             events.append(WatchEvent(EventType.PRICE_APPROACHES_STOP, now_ms, price, {}))
         if EventType.PRICE_APPROACHES_TAKE not in state._fired_non_terminal and _is_near_take(
-            state.side, price, state.take
+            state, price
         ):
             events.append(WatchEvent(EventType.PRICE_APPROACHES_TAKE, now_ms, price, {}))
         if EventType.BREAKEVEN_REACHED not in state._fired_non_terminal and _is_breakeven(
@@ -67,18 +71,18 @@ def _is_take_hit(side: WatchSide, price: Decimal, take: Decimal) -> bool:
     return price <= take
 
 
-def _is_near_stop(side: WatchSide, price: Decimal, stop: Decimal) -> bool:
-    band = stop * _APPROACH_BAND_PCT
-    if side is WatchSide.LONG:
-        return stop < price <= stop + band
-    return stop - band <= price < stop
+def _is_near_stop(state: WatchState, price: Decimal) -> bool:
+    band = (state.entry - state.stop).copy_abs() * _APPROACH_BAND_RATIO
+    if state.side is WatchSide.LONG:
+        return state.stop < price <= state.stop + band
+    return state.stop - band <= price < state.stop
 
 
-def _is_near_take(side: WatchSide, price: Decimal, take: Decimal) -> bool:
-    band = take * _APPROACH_BAND_PCT
-    if side is WatchSide.LONG:
-        return take - band <= price < take
-    return take < price <= take + band
+def _is_near_take(state: WatchState, price: Decimal) -> bool:
+    band = (state.take - state.entry).copy_abs() * _APPROACH_BAND_RATIO
+    if state.side is WatchSide.LONG:
+        return state.take - band <= price < state.take
+    return state.take < price <= state.take + band
 
 
 def _is_breakeven(state: WatchState, price: Decimal) -> bool:

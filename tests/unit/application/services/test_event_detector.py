@@ -116,3 +116,27 @@ class TestNoEvent:
         state = _long_state(btc_symbol)
         events = EventDetector.detect(state, price=Decimal("100.5"), now_ms=2_000)
         assert events == []
+
+    def test_tight_stop_no_false_approach(self, btc_symbol) -> None:
+        """Regression: entry 79286, stop 79100, take 79500 — tight levels.
+
+        With the old 0.5%-of-level band both approach events fired at
+        price 79307 (the very first tick after entry). With distance-
+        based band (20% of entry↔level) the price must actually close
+        in on a level before the event fires.
+        """
+        state = WatchState(
+            watch_id="w",
+            symbol=btc_symbol,
+            side=WatchSide.LONG,
+            entry=Decimal("79286"),
+            stop=Decimal("79100"),
+            take=Decimal("79500"),
+            size_quote=Decimal("10000"),
+            started_at_ms=1_000,
+            max_duration_sec=3600,
+        )
+        events = EventDetector.detect(state, price=Decimal("79307"), now_ms=2_000)
+        types = [e.type for e in events]
+        assert EventType.PRICE_APPROACHES_STOP not in types
+        assert EventType.PRICE_APPROACHES_TAKE not in types
