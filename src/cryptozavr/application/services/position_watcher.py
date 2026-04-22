@@ -1,14 +1,21 @@
-"""Position watcher service: EventDetector (pure) + PositionWatcher (stateful).
-
-This file will grow in Task 5 to include PositionWatcher. For now only
-EventDetector is exported.
-"""
+"""Position watcher service: EventDetector (pure) + PositionWatcher (stateful)."""
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import logging
+import time
+import uuid
+from collections.abc import AsyncIterator
 from decimal import Decimal
+from typing import TYPE_CHECKING, Protocol
 
-from cryptozavr.domain.watch import EventType, WatchEvent, WatchSide, WatchState
+from cryptozavr.domain.exceptions import WatchNotFoundError
+from cryptozavr.domain.watch import EventType, WatchEvent, WatchSide, WatchState, WatchStatus
+
+if TYPE_CHECKING:
+    from cryptozavr.domain.symbols import Symbol
 
 _APPROACH_BAND_PCT = Decimal("0.005")  # 0.5%
 
@@ -79,3 +86,97 @@ def _is_breakeven(state: WatchState, price: Decimal) -> bool:
     if state.side is WatchSide.LONG:
         return price - state.entry >= r
     return state.entry - price >= r
+
+
+_LOG = logging.getLogger(__name__)
+
+
+class WsProviderProto(Protocol):
+    def watch_ticker(self, native_symbol: str) -> AsyncIterator[tuple[Decimal, int]]: ...
+
+
+class PositionWatcher:
+    def __init__(
+        self,
+        *,
+        ws_provider: WsProviderProto,
+        registry: dict[str, WatchState],
+    ) -> None:
+        self._ws = ws_provider
+        self._registry = registry
+
+    async def start(
+        self,
+        *,
+        symbol: Symbol,
+        side: WatchSide,
+        entry: Decimal,
+        stop: Decimal,
+        take: Decimal,
+        size_quote: Decimal | None,
+        max_duration_sec: int,
+    ) -> str:
+        watch_id = uuid.uuid4().hex[:12]
+        state = WatchState(
+            watch_id=watch_id,
+            symbol=symbol,
+            side=side,
+            entry=entry,
+            stop=stop,
+            take=take,
+            size_quote=size_quote,
+            started_at_ms=int(time.time() * 1000),
+            max_duration_sec=max_duration_sec,
+        )
+        self._registry[watch_id] = state
+        state._task = asyncio.create_task(self._run(state), name=f"watch-{watch_id}")
+        return watch_id
+
+    def check(self, watch_id: str) -> WatchState:
+        state = self._registry.get(watch_id)
+        if state is None:
+            raise WatchNotFoundError(watch_id)
+        return state
+
+    async def stop(self, watch_id: str) -> WatchState:
+        state = self.check(watch_id)
+        task = state._task
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        if state.status is WatchStatus.RUNNING:
+            state.status = WatchStatus.CANCELLED
+        return state
+
+    async def _run(self, state: WatchState) -> None:
+        try:
+            async for price, ts_ms in self._ws.watch_ticker(state.symbol.native_symbol):
+                state.current_price = price
+                state.last_tick_at_ms = ts_ms
+                _update_pnl(state, price)
+
+                events = EventDetector.detect(state, price=price, now_ms=ts_ms)
+                for event in events:
+                    state.append_event(event)
+                    if event.type.is_terminal:
+                        state.status = WatchStatus(event.type.value)
+                        return
+                    state._fired_non_terminal.add(event.type)
+        except asyncio.CancelledError:
+            if state.status is WatchStatus.RUNNING:
+                state.status = WatchStatus.CANCELLED
+            raise
+        except Exception as exc:
+            _LOG.exception("watch loop failed: %s", exc)
+            state.status = WatchStatus.ERROR
+
+
+def _update_pnl(state: WatchState, price: Decimal) -> None:
+    if state.side is WatchSide.LONG:
+        pct = (price - state.entry) / state.entry
+    else:
+        pct = (state.entry - price) / state.entry
+    state.pnl_pct = pct.quantize(Decimal("0.0001"))
+    if state.size_quote is not None:
+        state.pnl_quote = (state.size_quote * pct).quantize(Decimal("0.01"))
