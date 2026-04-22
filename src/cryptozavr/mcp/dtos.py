@@ -17,6 +17,12 @@ from cryptozavr.domain.market_data import (
     Ticker,
     TradeTick,
 )
+from cryptozavr.domain.paper import (
+    PaperSide,
+    PaperStats,
+    PaperStatus,
+    PaperTrade,
+)
 from cryptozavr.domain.symbols import Symbol
 from cryptozavr.domain.value_objects import PriceSize
 from cryptozavr.domain.watch import (
@@ -583,4 +589,87 @@ class WatchStateDTO(BaseModel):
             elapsed_sec=max(0, elapsed_ms // 1000),
             events=[WatchEventDTO.from_domain(e) for e in events_slice],
             next_event_index=len(state.events),
+        )
+
+
+class PaperTradeDTO(BaseModel):
+    """Wire-format paper trade record."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    side: PaperSide
+    venue: str
+    symbol: str
+    entry: Decimal
+    stop: Decimal
+    take: Decimal
+    size_quote: Decimal
+    opened_at_ms: int
+    max_duration_sec: int
+    status: PaperStatus
+    exit_price: Decimal | None = None
+    closed_at_ms: int | None = None
+    pnl_quote: Decimal | None = None
+    reason: str | None = None
+    watch_id: str | None = None
+    note: str | None = None
+
+    @classmethod
+    def from_domain(cls, trade: PaperTrade) -> PaperTradeDTO:
+        return cls(
+            id=str(trade.id),
+            side=trade.side,
+            venue=trade.venue,
+            symbol=trade.symbol_native,
+            entry=trade.entry,
+            stop=trade.stop,
+            take=trade.take,
+            size_quote=trade.size_quote,
+            opened_at_ms=trade.opened_at_ms,
+            max_duration_sec=trade.max_duration_sec,
+            status=trade.status,
+            exit_price=trade.exit_price,
+            closed_at_ms=trade.closed_at_ms,
+            pnl_quote=trade.pnl_quote,
+            reason=trade.reason,
+            watch_id=trade.watch_id,
+            note=trade.note,
+        )
+
+
+class PaperStatsDTO(BaseModel):
+    """Wire-format paper trading statistics with live bankroll."""
+
+    model_config = ConfigDict(frozen=True)
+
+    trades_count: int
+    wins: int
+    losses: int
+    open_count: int
+    win_rate: Decimal
+    net_pnl_quote: Decimal
+    avg_win_quote: Decimal
+    avg_loss_quote: Decimal
+    bankroll_initial: Decimal
+    bankroll_live: Decimal
+
+    @classmethod
+    def from_stats(
+        cls,
+        stats: PaperStats,
+        *,
+        bankroll_initial: Decimal,
+    ) -> PaperStatsDTO:
+        return cls(
+            trades_count=stats.trades_count,
+            wins=stats.wins,
+            losses=stats.losses,
+            open_count=stats.open_count,
+            win_rate=stats.win_rate,
+            net_pnl_quote=stats.net_pnl_quote,
+            avg_win_quote=stats.avg_win_quote,
+            avg_loss_quote=stats.avg_loss_quote,
+            bankroll_initial=bankroll_initial,
+            bankroll_live=(bankroll_initial + stats.net_pnl_quote).quantize(Decimal("0.01")),
         )
