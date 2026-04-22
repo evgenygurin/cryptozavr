@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Phase 2A — Declarative strategy DSL + Builder
+
+- `cryptozavr.application.strategy` package with 4 frozen Pydantic DTOs
+  (`IndicatorRef`, `Condition`, `StrategyEntry`, `StrategyExit`) and the
+  aggregate `StrategySpec`. Enums (`StrategySide`, `IndicatorKind`,
+  `ComparatorOp`, `PriceSource`) ship lowercase-snake values as the
+  wire contract for future 2D MCP tools + 2E Supabase persistence.
+- `StrategySpecBuilder` — fluent, immutable step-by-step constructor
+  backed by a frozen dataclass and `dataclasses.replace`. Pattern #16
+  (Builder) shipped.
+- Cross-field invariants: non-empty entry conditions, at-least-one exit
+  path (conditions / take_profit / stop_loss), `size_pct ∈ (0, 1]`,
+  positive TP/SL when present, finite-Decimal `Condition.rhs`,
+  `period ∈ [1, 500]`. Warm-up-vs-timeframe heuristic deferred to 2A+1
+  (no principled line between legit long-lookback and config typo).
+- Reuses `domain.value_objects.Timeframe`, `domain.venues.VenueId`,
+  `domain.symbols.Symbol` (no parallel enums).
+- 40 unit tests covering happy path, invariants, immutability,
+  `model_copy(update=...)` cloning, builder/constructor parity.
+- No MCP surface (2D), no persistence (2E), no backtest execution (2B) —
+  StrategySpec is a pure DTO at this layer.
+
 ### Added — Phase 2C — Post-backtest analytics Visitor pattern
 
 - `BacktestReport` DTO (`BacktestTrade` + `EquityPoint` + `TradeSide`) with
