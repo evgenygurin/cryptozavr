@@ -12,6 +12,7 @@ payloads, not the domain type directly.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -202,4 +203,111 @@ class ValidateStrategyResponse(BaseModel):
             raise ValueError("ValidateStrategyResponse: valid=True but issues not empty")
         if not self.valid and not self.issues:
             raise ValueError("ValidateStrategyResponse: valid=False requires at least one issue")
+        return self
+
+
+# -------------------------- Unit 2D-2 DTOs --------------------------------
+# Added by read-only tools (list / explain / diff). Kept in the same module
+# as the payload DTOs because consumers (strategy_read_only.py tool module
+# + tests) naturally import them together; splitting would just add an
+# import layer without reducing coupling.
+
+
+class StoredStrategySummaryDTO(BaseModel):
+    """Summary of a persisted strategy (no embedded spec — fetch separately).
+
+    Shape locked now so 2E can swap the in-memory stub for a real repository
+    without changing the wire contract.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    name: str
+    version: int
+    created_at_ms: int
+
+
+class ListStrategiesResponse(BaseModel):
+    """Response for list_strategies. Until 2E lands persistence this returns
+    an empty list and sets `note` to explain the stub. Coherent once the
+    repository is wired: `note` becomes None for a healthy response.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    strategies: list[StoredStrategySummaryDTO] = Field(default_factory=list)
+    note: str | None = None
+
+
+class ExplanationSectionDTO(BaseModel):
+    """One titled section of the explain_strategy output (plain-text body)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    title: str
+    body: str
+
+
+class ExplainStrategyResponse(BaseModel):
+    """Response for explain_strategy.
+
+    Coherence invariants:
+      * `error` set → no `markdown` / `sections` (don't produce garbage on bad input).
+      * `error` None → `markdown` required (success must carry content).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    markdown: str | None = None
+    sections: list[ExplanationSectionDTO] = Field(default_factory=list)
+    error: str | None = None
+
+    @model_validator(mode="after")
+    def _coherence(self) -> ExplainStrategyResponse:
+        if self.error is not None and (self.markdown is not None or self.sections):
+            raise ValueError("ExplainStrategyResponse: error set but content present")
+        if self.error is None and self.markdown is None:
+            raise ValueError("ExplainStrategyResponse: success path requires markdown")
+        return self
+
+
+class FieldDiffDTO(BaseModel):
+    """A single leaf-level difference between two strategy specs.
+
+    `path` is a JSON-pointer-like string rooted at the top-level spec
+    (e.g. "/name", "/entry/conditions/0/lhs/period"). `left` / `right`
+    hold the raw values from `model_dump()` output — typed `Any` because
+    they can be str / int / bool / None / Decimal-as-str depending on the
+    field.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    left: Any | None = None
+    right: Any | None = None
+
+
+class DiffStrategiesResponse(BaseModel):
+    """Response for diff_strategies.
+
+    Coherence invariants:
+      * `errors` set → `equal=False` and `differences=[]` (can't compare what
+        didn't parse).
+      * No errors + `equal=True` → `differences=[]` (tautology).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    equal: bool
+    differences: list[FieldDiffDTO] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _coherence(self) -> DiffStrategiesResponse:
+        if self.errors and (self.equal or self.differences):
+            raise ValueError("DiffStrategiesResponse: errors set but equal/differences produced")
+        if not self.errors and self.equal and self.differences:
+            raise ValueError("DiffStrategiesResponse: equal=True but differences not empty")
         return self
