@@ -1,5 +1,19 @@
 # cryptozavr — Claude Code project instructions
 
+## ⚡ Dev Workflow Contract (READ FIRST)
+
+**Для любой session'и которая пишет/ревьюит код:**
+
+1. Прочитать [`docs/dev-workflow-contract.md`](docs/dev-workflow-contract.md) — жёсткие правила, приоритетны над дефолтным поведением
+2. Прочитать [`docs/superpowers/plans/2026-04-22-phase-2d-to-phase-5-master-plan.md`](docs/superpowers/plans/2026-04-22-phase-2d-to-phase-5-master-plan.md) — master-план оставшегося MVP scope с чекбоксами
+3. Определить next pending phase → проверить blocking gate (phase 3/4/5 требуют brainstorming с user до старта)
+
+**Ключевое отличие от старого режима:**
+- Крупные unit'ы (3-5 на фазу), не 14 bite-sized задач
+- Один subagent на unit, один light review на unit
+- Heavy review только per group (раз на PR)
+- ~10-15× экономия токенов vs старый subagent-driven
+
 ## Plugin reload workflow — **ОБЯЗАТЕЛЬНО**
 
 **После редактирования любого компонента плагина — до того как использовать или проверять его — запустить `/reload-plugins`.**
