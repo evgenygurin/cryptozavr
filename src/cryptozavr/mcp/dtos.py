@@ -293,7 +293,14 @@ class SymbolDTO(BaseModel):
 
 
 class TrendingAssetDTO(BaseModel):
-    """Wire-format trending crypto asset (from CoinGecko)."""
+    """Wire-format trending crypto asset (from CoinGecko).
+
+    Note: `categories` is always an empty list in the current implementation.
+    CoinGecko's /search/trending endpoint does not include categories, and
+    the per-coin enrichment pass (/coins/{id}) is deliberately deferred to
+    avoid 15x fan-out on every trending call. Clients should treat this
+    field as reserved for a future release.
+    """
 
     model_config = ConfigDict(frozen=True)
 
