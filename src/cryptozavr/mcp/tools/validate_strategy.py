@@ -1,19 +1,12 @@
-"""validate_strategy MCP tool — parse StrategySpec payload, return structured errors.
+"""validate_strategy MCP tool — parse a StrategySpec payload, return issues.
 
-First phase-2D tool. Accepts the payload as a raw dict so pydantic's own
-ValidationError (raised at the dispatch layer if we typed the arg as the
-payload model) does not short-circuit the tool body. The tool then:
-
-1. Parses the dict via `StrategySpecPayload.model_validate` — catches
-   field-shape errors (missing fields, bad enums, range violations).
-2. Calls `payload.to_domain()` — catches domain-level errors surfaced by
-   Symbol.__post_init__ and the domain StrategySpec model_validator
-   (e.g. StrategyExit bail-out invariant).
-
-In both failure paths a structured `ValidateStrategyResponse` is returned
-with `valid=False` and a flat list of issues. Pydantic `ValidationError`
-details map to `ValidationIssueDTO`; domain `ValueError` / `ValidationError`
-become a single `value_error` issue at the root location.
+Accepts the payload as a raw dict so pydantic's ValidationError does not
+short-circuit the tool body at the dispatch layer. Parses via
+`StrategySpecPayload.model_validate` (field-shape errors) and then
+`payload.to_domain()` (domain invariants from Symbol and StrategyExit).
+Both failure paths return `ValidateStrategyResponse(valid=False, issues=...)`;
+pydantic errors map to `ValidationIssueDTO`, domain `ValueError` /
+`ValidationError` become a single `value_error` issue at the root.
 """
 
 from __future__ import annotations

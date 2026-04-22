@@ -1,12 +1,9 @@
-"""Phase 2D MCP payload DTOs — wire-format mirror of domain StrategySpec.
+"""MCP payload DTOs — wire-format mirror of domain `StrategySpec`.
 
-Domain `StrategySpec` lives in `cryptozavr.application.strategy.strategy_spec`
-and uses `Symbol` (frozen dataclass) with `arbitrary_types_allowed=True`.
-That means `StrategySpec.model_validate(json_dict)` cannot construct a
-Symbol from raw JSON — it expects a pre-built Symbol. The MCP wire surface
-therefore needs primitive-typed payload DTOs that expose `to_domain()`
-converters. `validate_strategy` (and all other 2D tools) consume these
-payloads, not the domain type directly.
+Domain `StrategySpec` uses `Symbol` (frozen dataclass) with
+`arbitrary_types_allowed=True`, so `model_validate(json_dict)` cannot build
+a Symbol from raw JSON. This module exposes primitive-typed payload DTOs
+with `to_domain()` converters that every MCP strategy tool consumes.
 """
 
 from __future__ import annotations
@@ -206,20 +203,8 @@ class ValidateStrategyResponse(BaseModel):
         return self
 
 
-# -------------------------- Unit 2D-2 DTOs --------------------------------
-# Added by read-only tools (list / explain / diff). Kept in the same module
-# as the payload DTOs because consumers (strategy_read_only.py tool module
-# + tests) naturally import them together; splitting would just add an
-# import layer without reducing coupling.
-
-
 class StoredStrategySummaryDTO(BaseModel):
-    """Summary of a persisted strategy (no embedded spec — fetch separately).
-
-    Extended in 2E-1 with venue / symbol_native / timeframe because the repo
-    denormalises those columns for fast filters, and they make the list view
-    useful without a second fetch per row.
-    """
+    """Summary of a persisted strategy (no embedded spec — fetch separately)."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -234,16 +219,20 @@ class StoredStrategySummaryDTO(BaseModel):
 
 
 class ListStrategiesResponse(BaseModel):
-    """Response for list_strategies.
-
-    2E-1 wires this to the real StrategySpecRepository. `error` is set only
-    when the repo / DB call fails; on success it's None.
-    """
+    """Response for list_strategies. `error` is set only on repo/DB failure."""
 
     model_config = ConfigDict(frozen=True)
 
     strategies: list[StoredStrategySummaryDTO] = Field(default_factory=list)
     error: str | None = None
+
+    @model_validator(mode="after")
+    def _coherence(self) -> ListStrategiesResponse:
+        if self.error is not None and self.strategies:
+            raise ValueError(
+                "ListStrategiesResponse: error set but strategies not empty",
+            )
+        return self
 
 
 class ExplanationSectionDTO(BaseModel):

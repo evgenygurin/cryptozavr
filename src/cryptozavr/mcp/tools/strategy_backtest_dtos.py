@@ -1,11 +1,8 @@
-"""Unit 2D-3 DTOs for compute-layer strategy tools.
+"""Compute-tool response DTOs: backtest report shapes + their envelopes.
 
-Split from `strategy_dtos.py` because the existing payload DTO module was
-already at ~300 LOC and adding the backtest report shapes would push it well
-past the 450-LOC ceiling we want to hold. Keep imports from here whenever you
-need report-shaped wire types (BacktestStrategyResponse, CompareStrategies-
-Response, StressTestResponse, SaveStrategyResponse); import payload DTOs from
-`strategy_dtos.py` as before.
+Separated from `strategy_dtos.py` so the payload module stays focused on
+wire-format inputs; this module holds only result-shape types consumed by
+backtest_strategy / compare_strategies / stress_test / save_strategy.
 """
 
 from __future__ import annotations
@@ -136,9 +133,8 @@ class CompareStrategiesResponse(BaseModel):
     """Response for compare_strategies.
 
     `comparison` is shaped metric → {strategy_name → value} so a client can
-    render a tidy side-by-side table. When two specs share a name the last
-    one wins (see tool docstring) — list_wise uniqueness is the caller's
-    responsibility.
+    render a side-by-side table. Duplicate strategy names: last wins in
+    `comparison`; `results` preserves all in order.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -147,9 +143,24 @@ class CompareStrategiesResponse(BaseModel):
     comparison: dict[str, dict[str, Decimal | None]] = Field(default_factory=dict)
     errors: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def _comparison_keys_are_result_names(self) -> CompareStrategiesResponse:
+        result_names = {r.strategy_name for r in self.results if r.report is not None}
+        for metric, per_strategy in self.comparison.items():
+            stray = set(per_strategy) - result_names
+            if stray:
+                raise ValueError(
+                    f"CompareStrategiesResponse.comparison[{metric!r}] references "
+                    f"strategy_name(s) {sorted(stray)!r} with no successful result",
+                )
+        return self
+
 
 class StressTestResponse(BaseModel):
-    """Response for stress_test. results is keyed by scenario name."""
+    """Response for stress_test. `results` is keyed by scenario name;
+    `errors` collects payload-level messages (unknown scenario, bad
+    initial_equity). Engine-level failures surface per-scenario via
+    `NamedBacktestDTO.error` inside `results`."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -158,18 +169,19 @@ class StressTestResponse(BaseModel):
 
 
 class SaveStrategyResponse(BaseModel):
-    """Response for save_strategy (2E-1 persistence).
-
-    Success: `id` is the UUID string from the upsert (new or existing by
-    content_hash — saves are idempotent per canonical spec JSON), `note`
-    is a short human-readable status line (e.g. 'saved'), `error` is None.
-
-    Failure: `id` is None, `note` is empty, `error` carries the problem
-    (parse failure, repo call failure, etc.).
-    """
+    """Response for save_strategy. Success: id set, note='saved', error None.
+    Failure: id None, note empty, error carries the message."""
 
     model_config = ConfigDict(frozen=True)
 
     id: str | None = None
     note: str
     error: str | None = None
+
+    @model_validator(mode="after")
+    def _coherence(self) -> SaveStrategyResponse:
+        if self.error is not None and self.id is not None:
+            raise ValueError("SaveStrategyResponse: error set but id also set")
+        if self.error is None and self.id is None:
+            raise ValueError("SaveStrategyResponse: success path requires id")
+        return self

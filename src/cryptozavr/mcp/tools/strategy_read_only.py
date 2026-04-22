@@ -1,18 +1,16 @@
-"""Unit 2D-2 / 2E-1 read-only strategy tools: list / explain / diff.
+"""Read-only strategy tools: list / explain / diff.
 
-`list_strategies` delegates to `StrategySpecRepository.list_recent()` — real
-Supabase-backed persistence landed in 2E-1. `explain_strategy` renders a
-human-readable markdown + structured sections view of a StrategySpec payload,
-and `diff_strategies` produces JSON-pointer-style per-field diffs between two
-payloads. Both are pure (no DI dependencies).
+`list_strategies` delegates to `StrategySpecRepository.list_recent()`.
+`explain_strategy` renders markdown + structured sections for a payload.
+`diff_strategies` produces JSON-pointer-style per-field diffs.
 
-Payloads are validated via `StrategySpecPayload.model_validate`; bad input
-is surfaced through coherent error fields on the response DTOs rather than
-raised upward (MCP clients get a structured, maskable message either way).
+Bad input surfaces as a coherent `error` field on the response rather
+than a raised ValidationError, matching the validate / backtest pattern.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Any
 
 from fastmcp import Context, FastMCP
@@ -34,6 +32,8 @@ from cryptozavr.mcp.tools.strategy_dtos import (
     StoredStrategySummaryDTO,
     StrategySpecPayload,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 # Module-level singleton — avoids B008 (function call in default argument).
 _STRATEGY_SPEC_REPO: StrategySpecRepository = Depends(get_strategy_spec_repo)
@@ -148,6 +148,8 @@ def register_strategy_read_only_tools(mcp: FastMCP) -> None:
         try:
             rows = await repo.list_recent(limit=limit)
         except Exception as exc:
+            _LOGGER.exception("strategy_spec repo list_recent crashed: %s", exc)
+            await ctx.error(f"list_strategies repo failure: {type(exc).__name__}")
             return ListStrategiesResponse(
                 strategies=[],
                 error=f"repository error: {type(exc).__name__}: {exc}",

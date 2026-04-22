@@ -1,23 +1,13 @@
-"""Unit 2D-3 / 2E-1 compute-layer strategy tools.
+"""Compute-layer strategy tools: backtest / compare / stress_test / save.
 
-Four MCP tools:
-  * backtest_strategy — flagship; load OHLCV via OhlcvService, run through
-    BacktestEngine, attach 5 visitor metrics.
-  * compare_strategies — backtest several specs sequentially, build a
-    side-by-side comparison dict keyed by metric name.
-  * stress_test — run a spec against synthetic bull / bear / chop regimes
-    (no OhlcvService call; scenarios are deterministic pd.DataFrames).
-  * save_strategy — persist spec via StrategySpecRepository (2E-1); returns
-    the upsert UUID (idempotent by content_hash).
-
-All four tools receive their payload as a single `dict[str, Any]` so
-malformed JSON surfaces as a structured `error` field instead of a
-pydantic ValidationError at dispatch time (same pattern as
-validate_strategy / explain_strategy in 2D-1/2D-2).
+Payloads come in as raw `dict[str, Any]` so malformed JSON becomes a
+structured `error` field rather than a pydantic ValidationError at
+dispatch time (same envelope pattern as validate / explain / diff).
 """
 
 from __future__ import annotations
 
+import logging
 import math
 from decimal import Decimal
 from typing import Annotated, Any
@@ -61,6 +51,8 @@ _DEFAULT_LIMIT = 500
 _DEFAULT_INITIAL_EQUITY = "10000"
 _DEFAULT_SCENARIOS = ("bull", "bear", "chop")
 _SCENARIO_BARS = 200
+
+_LOGGER = logging.getLogger(__name__)
 
 # Module-level singletons — avoid B008 (function call in default argument).
 _OHLCV_SERVICE: OhlcvService = Depends(get_ohlcv_service)
@@ -191,7 +183,9 @@ def _run_backtest_on_dataframe(
     except DomainValidationError as exc:
         return None, {}, f"backtest failed: {exc}"
     except Exception as exc:
-        # we translate to a wire-format error for the client.
+        # Broad except: engine/simulator bugs still reach the client as an
+        # error envelope, but log with traceback so Sentry doesn't lose them.
+        _LOGGER.exception("BacktestEngine.run crashed: %s", exc)
         return None, {}, f"backtest failed: {type(exc).__name__}: {exc}"
     raw_metrics = BacktestAnalyticsService(_default_visitors()).run_all(report)
     metrics = {name: _to_decimal_or_none(v) for name, v in raw_metrics.items()}
@@ -219,7 +213,9 @@ async def _run_backtest_with_fetch(
             force_refresh=force_refresh,
         )
     except Exception as exc:
-        # errors; surface them verbatim to the client as a single error line.
+        # Broad except: OhlcvService wraps transport / gateway / domain
+        # errors; all of them become a single wire-format error line.
+        _LOGGER.exception("ohlcv fetch crashed: %s", exc)
         return None, {}, [], f"ohlcv fetch failed: {type(exc).__name__}: {exc}"
     candles_df = _ohlcv_series_to_dataframe(fetch_result.series)
     report_dto, metrics, engine_err = _run_backtest_on_dataframe(
@@ -441,11 +437,10 @@ async def _save_strategy_impl(
     repo: StrategySpecRepository,
 ) -> SaveStrategyResponse:
     await ctx.info("save_strategy")
-    # _parse_spec_or_error yields a domain StrategySpec (post to_domain())
-    # but the repo contract is the pydantic StrategySpecPayload — we parse
-    # twice to keep contract-parse errors coherent with the rest of the
-    # tool family. Cheap: both are O(spec size).
-    _domain_spec, err = _parse_spec_or_error(spec)
+    # Parse twice: once to run the domain invariants via to_domain(), once
+    # to hand the pydantic payload to the repo. Domain run surfaces errors
+    # coherent with the rest of the tool family; both parses are O(spec).
+    _, err = _parse_spec_or_error(spec)
     if err is not None:
         return SaveStrategyResponse(id=None, note="", error=err)
     try:
@@ -461,6 +456,8 @@ async def _save_strategy_impl(
     try:
         row_id = await repo.save(payload)
     except Exception as exc:
+        _LOGGER.exception("strategy_spec repo save crashed: %s", exc)
+        await ctx.error(f"save_strategy repo failure: {type(exc).__name__}")
         return SaveStrategyResponse(
             id=None,
             note="",

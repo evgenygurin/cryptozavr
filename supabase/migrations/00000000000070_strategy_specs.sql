@@ -1,8 +1,7 @@
--- Phase 2 Sub-project E — declarative strategy persistence.
--- pgvector + cryptozavr schema already provided by 00000000000000_extensions.sql.
--- gen_random_uuid() is a Postgres core function since 13 (not pgcrypto —
--- that historically shipped it, but Supabase's base image exposes it
--- directly). Same pattern used in 00000000000030_audit.sql.
+-- Declarative strategy persistence (pgvector-backed).
+-- pgvector + cryptozavr schema are already provided by the extensions migration.
+-- gen_random_uuid() is a Postgres core function since 13 (not pgcrypto — that
+-- historically shipped it, but Supabase's base image exposes it directly).
 
 create table cryptozavr.strategy_specs (
   id            uuid primary key default gen_random_uuid(),

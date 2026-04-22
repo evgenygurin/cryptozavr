@@ -508,14 +508,11 @@ class TestCompareStrategies:
 class TestStressTest:
     @pytest.mark.asyncio
     async def test_default_scenarios_covers_bull_bear_chop(self) -> None:
-        # stress_test does NOT call OhlcvService (synthetic scenarios) — but
-        # the tool signature still requires the service to be registered.
-        # All three scenario keys must be accounted for, either as a
-        # successful result or as an error entry (BacktestEngine has known
-        # float-artefact edge cases on synthetic sine waves where
-        # slippage-adjusted entry/exit round-trip to a pnl that trips the
-        # sign invariant; those surface as `<name>: <reason>` in errors
-        # rather than results — both paths are acceptable for this tool).
+        # Bull and bear are monotone synthetic series — they must land in
+        # `results`. Chop (sine wave) hits a known BacktestEngine float-
+        # artefact edge case that can trip the pnl-sign invariant at the
+        # slippage-adjusted exit, so it may appear either in `results` or
+        # in `errors` with a "chop:" prefix.
         service = _mock_ohlcv_service(_make_uptrend_series(60))
         mcp = _build_server(service)
         async with Client(mcp) as client:
@@ -524,10 +521,12 @@ class TestStressTest:
                 {"payload": {"spec": _valid_spec_payload()}},
             )
         payload = _structured(result)
-        covered = set(payload["results"].keys()) | {
-            e.split(":", 1)[0].strip() for e in payload["errors"]
-        }
-        assert {"bull", "bear", "chop"} <= covered
+        assert "bull" in payload["results"], f"bull missing: {payload!r}"
+        assert "bear" in payload["results"], f"bear missing: {payload!r}"
+        chop_covered = "chop" in payload["results"] or any(
+            e.startswith("chop:") or e.startswith("chop ") for e in payload["errors"]
+        )
+        assert chop_covered, f"chop neither in results nor errors: {payload!r}"
 
     @pytest.mark.asyncio
     async def test_single_scenario_returns_only_that(self) -> None:
