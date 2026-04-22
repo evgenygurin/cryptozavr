@@ -19,6 +19,13 @@ from cryptozavr.domain.market_data import (
 )
 from cryptozavr.domain.symbols import Symbol
 from cryptozavr.domain.value_objects import PriceSize
+from cryptozavr.domain.watch import (
+    EventType,
+    WatchEvent,
+    WatchSide,
+    WatchState,
+    WatchStatus,
+)
 
 # 4-decimal precision (0.0001 bps) is far tighter than any venue tick size and
 # avoids leaking 28-digit Decimal remainders from the domain computation.
@@ -492,4 +499,88 @@ class AnalysisReportDTO(BaseModel):
             timeframe=report.timeframe.value,
             results=[AnalysisResultDTO.from_domain(r, reason_codes=[]) for r in report.results],
             reason_codes=list(reason_codes),
+        )
+
+
+class WatchIdDTO(BaseModel):
+    """Wire-format watch identifier + initial metadata."""
+
+    model_config = ConfigDict(frozen=True)
+
+    watch_id: str
+    status: WatchStatus
+    started_at_ms: int
+    expected_end_at_ms: int
+
+    @classmethod
+    def from_domain(cls, state: WatchState) -> WatchIdDTO:
+        return cls(
+            watch_id=state.watch_id,
+            status=state.status,
+            started_at_ms=state.started_at_ms,
+            expected_end_at_ms=(state.started_at_ms + state.max_duration_sec * 1000),
+        )
+
+
+class WatchEventDTO(BaseModel):
+    """Wire-format single watch event."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: EventType
+    ts_ms: int
+    price: Decimal
+    details: dict[str, str]
+
+    @classmethod
+    def from_domain(cls, event: WatchEvent) -> WatchEventDTO:
+        return cls(
+            type=event.type,
+            ts_ms=event.ts_ms,
+            price=event.price,
+            details=dict(event.details),
+        )
+
+
+class WatchStateDTO(BaseModel):
+    """Wire-format watch state snapshot (with event slice)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    watch_id: str
+    symbol: str
+    side: WatchSide
+    entry: Decimal
+    stop: Decimal
+    take: Decimal
+    size_quote: Decimal | None
+    status: WatchStatus
+    current_price: Decimal | None
+    last_tick_at_ms: int | None
+    pnl_quote: Decimal | None
+    pnl_pct: Decimal | None
+    elapsed_sec: int
+    events: list[WatchEventDTO]
+    next_event_index: int
+
+    @classmethod
+    def from_domain(cls, state: WatchState, *, since_event_index: int = 0) -> WatchStateDTO:
+        events_slice = state.events[since_event_index:]
+        elapsed_ms = (state.last_tick_at_ms or state.started_at_ms) - state.started_at_ms
+        return cls(
+            watch_id=state.watch_id,
+            symbol=state.symbol.native_symbol,
+            side=state.side,
+            entry=state.entry,
+            stop=state.stop,
+            take=state.take,
+            size_quote=state.size_quote,
+            status=state.status,
+            current_price=state.current_price,
+            last_tick_at_ms=state.last_tick_at_ms,
+            pnl_quote=state.pnl_quote,
+            pnl_pct=state.pnl_pct,
+            elapsed_sec=max(0, elapsed_ms // 1000),
+            events=[WatchEventDTO.from_domain(e) for e in events_slice],
+            next_event_index=len(state.events),
         )
