@@ -77,3 +77,16 @@ class TestCategoriesToList:
         assert len(cats) == 3
         assert cats[0]["id"] == "layer-1"
         assert cats[0]["market_cap"] == 1500000000000
+
+    def test_maps_id_to_category_id_for_dto_compat(self) -> None:
+        """CoinGecko /coins/categories returns `id`; DTO wants `category_id`."""
+        raw = [{"id": "layer-1", "name": "L1", "market_cap": 1, "market_cap_change_24h": 0.5}]
+        cats = CoinGeckoAdapter.categories_to_list(raw)
+        assert cats[0]["category_id"] == "layer-1"
+        assert cats[0]["id"] == "layer-1"  # original left intact
+
+    def test_preserves_existing_category_id(self) -> None:
+        """If upstream already supplies category_id, do not clobber it."""
+        raw = [{"category_id": "legacy", "id": "new", "name": "X"}]
+        cats = CoinGeckoAdapter.categories_to_list(raw)
+        assert cats[0]["category_id"] == "legacy"
