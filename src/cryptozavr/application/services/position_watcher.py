@@ -7,7 +7,7 @@ import contextlib
 import logging
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from decimal import Decimal
 from typing import TYPE_CHECKING, Protocol
 
@@ -119,6 +119,7 @@ class PositionWatcher:
         take: Decimal,
         size_quote: Decimal | None,
         max_duration_sec: int,
+        on_terminal: Callable[[str, WatchEvent], Awaitable[None]] | None = None,
     ) -> str:
         watch_id = uuid.uuid4().hex[:12]
         state = WatchState(
@@ -134,7 +135,7 @@ class PositionWatcher:
         )
         state.ensure_cond()  # init change condition in event loop
         self._registry[watch_id] = state
-        state._task = asyncio.create_task(self._run(state), name=f"watch-{watch_id}")
+        state._task = asyncio.create_task(self._run(state, on_terminal), name=f"watch-{watch_id}")
         return watch_id
 
     def check(self, watch_id: str) -> WatchState:
@@ -155,7 +156,11 @@ class PositionWatcher:
         await state.notify_change()
         return state
 
-    async def _run(self, state: WatchState) -> None:
+    async def _run(
+        self,
+        state: WatchState,
+        on_terminal: Callable[[str, WatchEvent], Awaitable[None]] | None,
+    ) -> None:
         try:
             async for price, ts_ms in self._ws.watch_ticker(state.symbol.native_symbol):
                 state.current_price = price
@@ -168,6 +173,11 @@ class PositionWatcher:
                     if event.type.is_terminal:
                         state.status = WatchStatus(event.type.value)
                         await state.notify_change()
+                        if on_terminal is not None:
+                            try:
+                                await on_terminal(state.watch_id, event)
+                            except Exception as exc:
+                                _LOG.exception("on_terminal callback failed: %s", exc)
                         return
                     state._fired_non_terminal.add(event.type)
                 if events:

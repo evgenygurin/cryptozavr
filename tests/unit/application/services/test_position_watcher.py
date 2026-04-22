@@ -123,3 +123,54 @@ async def test_check_returns_snapshot(btc_symbol) -> None:
     state = watcher.check(watch_id)
     assert state.current_price == Decimal("100")
     await watcher.stop(watch_id)
+
+
+async def test_on_terminal_callback_fires_on_stop_hit(btc_symbol) -> None:
+    ticks = [(Decimal("100"), 1_000), (Decimal("95"), 1_100)]
+    ws = FakeWsProvider(ticks, hold_open=False)
+    registry: dict = {}
+    watcher = PositionWatcher(ws_provider=ws, registry=registry)
+    calls: list[tuple[str, str]] = []
+
+    async def on_terminal(watch_id: str, event) -> None:
+        calls.append((watch_id, event.type.value))
+
+    watch_id = await watcher.start(
+        symbol=btc_symbol,
+        side=WatchSide.LONG,
+        entry=Decimal("100"),
+        stop=Decimal("95"),
+        take=Decimal("110"),
+        size_quote=None,
+        max_duration_sec=3600,
+        on_terminal=on_terminal,
+    )
+    state = registry[watch_id]
+    assert state._task is not None
+    await asyncio.wait_for(state._task, timeout=1.0)
+    assert len(calls) == 1
+    assert calls[0] == (watch_id, "stop_hit")
+
+
+async def test_on_terminal_not_fired_on_manual_stop(btc_symbol) -> None:
+    ws = FakeWsProvider([(Decimal("100"), 1_000)], hold_open=True)
+    registry: dict = {}
+    watcher = PositionWatcher(ws_provider=ws, registry=registry)
+    calls: list[str] = []
+
+    async def on_terminal(_watch_id, _event) -> None:
+        calls.append("fired")
+
+    watch_id = await watcher.start(
+        symbol=btc_symbol,
+        side=WatchSide.LONG,
+        entry=Decimal("100"),
+        stop=Decimal("95"),
+        take=Decimal("110"),
+        size_quote=None,
+        max_duration_sec=3600,
+        on_terminal=on_terminal,
+    )
+    await asyncio.sleep(0.05)
+    await watcher.stop(watch_id)
+    assert calls == []
