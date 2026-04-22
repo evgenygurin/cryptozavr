@@ -222,31 +222,53 @@ async def build_production_service(
     }
 
     async def cleanup() -> None:
-        _LOG.info("cryptozavr shutting down")
-        for stopper, label in (
-            (cache_invalidator.stop, "cache invalidator"),
-            (ticker_sync_worker.stop, "ticker sync worker"),
-            (health_monitor.stop, "health monitor"),
-        ):
-            try:
-                await stopper()
-            except Exception as exc:
-                _LOG.warning("%s stop failed: %s", label, exc)
-        try:
-            await subscriber.close()
-        except Exception as exc:
-            _LOG.warning("realtime subscriber close failed: %s", exc)
-        try:
-            await http_registry.close_all()
-        except Exception as exc:
-            _LOG.warning("http registry close failed: %s", exc)
-        try:
-            await gateway.close()
-        except Exception as exc:
-            _LOG.warning("gateway close failed: %s", exc)
-        try:
-            await pg_pool.close()
-        except Exception as exc:
-            _LOG.warning("pg pool close failed: %s", exc)
+        await _shutdown(
+            cache_invalidator=cache_invalidator,
+            ticker_sync_worker=ticker_sync_worker,
+            health_monitor=health_monitor,
+            providers=providers,
+            subscriber=subscriber,
+            http_registry=http_registry,
+            gateway=gateway,
+            pg_pool=pg_pool,
+        )
 
     return state, cleanup
+
+
+async def _shutdown(
+    *,
+    cache_invalidator: CacheInvalidator,
+    ticker_sync_worker: TickerSyncWorker,
+    health_monitor: HealthMonitor,
+    providers: dict[VenueId, Any],
+    subscriber: RealtimeSubscriber,
+    http_registry: HttpClientRegistry,
+    gateway: SupabaseGateway,
+    pg_pool: Any,
+) -> None:
+    _LOG.info("cryptozavr shutting down")
+    for stopper, label in (
+        (cache_invalidator.stop, "cache invalidator"),
+        (ticker_sync_worker.stop, "ticker sync worker"),
+        (health_monitor.stop, "health monitor"),
+    ):
+        try:
+            await stopper()
+        except Exception as exc:
+            _LOG.warning("%s stop failed: %s", label, exc)
+    for venue_id, provider in providers.items():
+        try:
+            await provider.close()
+        except Exception as exc:
+            _LOG.warning("provider %s close failed: %s", venue_id, exc)
+    for closer, label in (
+        (subscriber.close, "realtime subscriber"),
+        (http_registry.close_all, "http registry"),
+        (gateway.close, "gateway"),
+        (pg_pool.close, "pg pool"),
+    ):
+        try:
+            await closer()
+        except Exception as exc:
+            _LOG.warning("%s close failed: %s", label, exc)
