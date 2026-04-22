@@ -116,6 +116,12 @@ alter table cryptozavr.paper_trades enable row level security;
 create policy service_role_all on cryptozavr.paper_trades
   for all to service_role using (true) with check (true);
 
+-- Broadcast trade lifecycle (insert/update) to Supabase Realtime so
+-- parallel sessions, dashboards, or risk monitors can react without
+-- polling. Piggy-backs on the existing supabase_realtime publication
+-- (see 00000000000060_realtime.sql).
+alter publication supabase_realtime add table cryptozavr.paper_trades;
+
 -- View: running stats (computed on demand, not cached).
 create or replace view cryptozavr.paper_stats as
 select
@@ -345,6 +351,33 @@ The handler:
    gives up. The running watch is gone by now; the row stays `running`
    until the next restart resume, which will pick it up again and create
    a fresh watch. This is an acceptable degradation mode for paper trading.
+
+## Supabase Realtime broadcast
+
+The `paper_trades` table joins the existing `supabase_realtime`
+publication (one-line migration, see Data layer above). Any
+`INSERT`/`UPDATE`/`DELETE` is delivered as a `postgres_changes` event
+on the `supabase_realtime` channel filtered by
+`schema=cryptozavr,table=paper_trades`.
+
+Consumers get the complete row on insert, the `old`+`new` row on
+update (with only changed columns populated in `old`), and the
+`old` row on delete. This enables three useful patterns without any
+extra server code:
+
+1. **Parallel LLM sessions** sharing the same ledger see trade state
+   changes immediately (open from session A reflected in session B).
+2. **External dashboards** subscribe via the Supabase JS/Python client
+   and render a live trade list.
+3. **Internal cross-service reactions** — a future risk-monitor
+   process can subscribe to terminal-status updates and page the
+   operator.
+
+No publisher-side code is required — the existing `asyncpg`-based
+repository writes go through standard SQL, and Postgres logical
+replication handles the rest. `RealtimeSubscriber` in the project
+already demonstrates the consumer pattern for `tickers_live`; the
+same code works against `paper_trades` by filtering on table name.
 
 ## Error handling
 
