@@ -329,6 +329,60 @@ class CategoryDTO(BaseModel):
         )
 
 
+class VenuesListDTO(BaseModel):
+    """Wire-format catalog of supported venue ids."""
+
+    model_config = ConfigDict(frozen=True)
+
+    venues: list[str]
+
+
+class SymbolsListDTO(BaseModel):
+    """Wire-format symbols-per-venue lookup."""
+
+    model_config = ConfigDict(frozen=True)
+
+    venue: str
+    symbols: list[SymbolDTO]
+    error: str | None = None
+
+
+class TrendingListDTO(BaseModel):
+    """Wire-format trending assets list (CoinGecko)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    assets: list[TrendingAssetDTO]
+    error: str | None = None
+
+
+class CategoriesListDTO(BaseModel):
+    """Wire-format CoinGecko market categories list."""
+
+    model_config = ConfigDict(frozen=True)
+
+    categories: list[CategoryDTO]
+    error: str | None = None
+
+
+class VenueHealthEntryDTO(BaseModel):
+    """Per-venue health entry for the list tool / banner."""
+
+    model_config = ConfigDict(frozen=True)
+
+    venue: str
+    state: str
+    last_checked_ms: int | None = None
+
+
+class VenueHealthDTO(BaseModel):
+    """Wire-format venue health snapshot."""
+
+    model_config = ConfigDict(frozen=True)
+
+    venues: list[VenueHealthEntryDTO]
+
+
 def _json_friendly(value: Any) -> Any:
     """Recursively convert tuples → lists for model_dump(mode='json') safety."""
     if isinstance(value, tuple):

@@ -22,6 +22,7 @@ from cryptozavr.mcp.resources.catalogs import register_resources
 from cryptozavr.mcp.resources.venue_health import register_venue_health_resource
 from cryptozavr.mcp.settings import Settings
 from cryptozavr.mcp.tools.analytics import register_analytics_tools
+from cryptozavr.mcp.tools.catalog import register_catalog_tools
 from cryptozavr.mcp.tools.discovery import register_resolve_symbol_tool
 from cryptozavr.mcp.tools.history import register_fetch_ohlcv_history_tool
 from cryptozavr.mcp.tools.ohlcv import register_ohlcv_tool
@@ -84,6 +85,7 @@ def build_server(settings: Settings) -> FastMCP:
     register_resolve_symbol_tool(mcp)
     register_analytics_tools(mcp)
     register_fetch_ohlcv_history_tool(mcp)
+    register_catalog_tools(mcp)
     register_prompts(mcp)
     register_resources(mcp)
     register_venue_health_resource(mcp)
