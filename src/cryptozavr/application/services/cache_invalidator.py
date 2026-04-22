@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -13,13 +14,15 @@ from cryptozavr.infrastructure.supabase.realtime import (
 
 
 class CacheInvalidator:
-    """Invalidates per-venue ticker caches when tickers_live rows change.
+    """Invalidates provider ticker caches when tickers_live rows change.
 
-    Subscribes with `RealtimeSubscriber.subscribe_tickers` for each known
-    venue. On every incoming payload, it resolves the venue_id from the
-    row and calls `invalidate_tickers()` on the provider wrapped around
-    an `InMemoryCachingDecorator`. Missing attributes fall through to a
-    debug log so an incomplete wiring does not crash the process.
+    `cryptozavr.tickers_live` stores `symbol_id` but no `venue_id`, and
+    Supabase Realtime filters are single-column, so we subscribe without
+    a filter and let the callback route events. When the payload exposes
+    a venue hint (`record.venue_id` / `record.venue` / top-level
+    `venue_id`) we invalidate just that provider; otherwise we fall back
+    to pessimistic "invalidate every venue we know about" — safer than
+    silently doing nothing, which was the previous behaviour.
     """
 
     def __init__(
@@ -35,16 +38,27 @@ class CacheInvalidator:
         self._handles: list[SubscriptionHandle] = []
 
     def on_ticker_change(self, payload: Any) -> None:
-        """Realtime callback entry point. Swallows errors to protect the loop."""
+        """Realtime callback. Classifies payload and invokes invalidation."""
+        venues = self._resolve_target_venues(payload)
+        if not venues:
+            return
+        for venue_id in venues:
+            self._invalidate(venue_id)
+
+    def _resolve_target_venues(self, payload: Any) -> list[VenueId]:
+        if not isinstance(payload, dict):
+            return []
         venue_label = self._extract_venue_id(payload)
-        if venue_label is None:
-            self._logger.debug("realtime payload without venue_id: %r", payload)
-            return
-        try:
-            venue_id = VenueId(venue_label)
-        except ValueError:
-            self._logger.debug("unknown venue_id in realtime payload: %s", venue_label)
-            return
+        if venue_label is not None:
+            try:
+                return [VenueId(venue_label)]
+            except ValueError:
+                self._logger.debug("unknown venue_id in realtime payload: %s", venue_label)
+                return []
+        # No venue hint — pessimistic invalidation across all providers.
+        return list(self._providers.keys())
+
+    def _invalidate(self, venue_id: VenueId) -> None:
         provider = self._providers.get(venue_id)
         if provider is None:
             return
@@ -66,8 +80,10 @@ class CacheInvalidator:
                     venue_id=str(venue_id),
                     callback=self.on_ticker_change,
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception:
-                self._logger.warning("failed to subscribe realtime tickers for %s", venue_id)
+                self._logger.exception("failed to subscribe realtime tickers for %s", venue_id)
                 continue
             self._handles.append(handle)
 

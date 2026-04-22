@@ -34,7 +34,12 @@ class ProviderFactory:
     """Factory Method for fully-wired providers.
 
     Each create_* method returns a LoggingDecorator-wrapped chain:
-    Logging > Caching > RateLimit > Retry > base provider.
+    Logging > Caching > RateLimit > Metrics (optional) > Retry > base.
+
+    When `metrics_registry` is supplied, `MetricsDecorator` sits
+    *above* `RetryDecorator` so one user-initiated call produces one
+    `provider_calls_total` record — internal retries are not
+    double-counted.
     """
 
     def __init__(
@@ -96,15 +101,16 @@ class ProviderFactory:
 
     def _wrap(self, base: Any, *, venue_id: str) -> LoggingDecorator:
         limiter = self._rate.get(venue_id)
-        inner: Any = base
-        if self._metrics is not None:
-            inner = MetricsDecorator(inner, registry=self._metrics)
         wrapped: Any = RetryDecorator(
-            inner,
+            base,
             max_attempts=self._retry_max_attempts,
             base_delay=self._retry_base_delay,
             jitter=self._retry_jitter,
         )
+        if self._metrics is not None:
+            # Metrics sits above Retry so internal retries are not
+            # double-counted in provider_calls_total / duration_ms.
+            wrapped = MetricsDecorator(wrapped, registry=self._metrics)
         wrapped = RateLimitDecorator(wrapped, limiter=limiter)
         wrapped = InMemoryCachingDecorator(
             wrapped,

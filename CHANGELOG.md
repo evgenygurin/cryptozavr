@@ -55,7 +55,7 @@ are the clean-render alternative for interactive views.
 - +14 unit tests: `trades_to_domain` (4), provider trades happy-path +
   unknown-side (2), order-book depth snap parametrised over 6 inputs,
   CoinGecko categories id→category_id mapping + legacy preservation (2).
-- Unit + contract total: **437 passing** (was 423).
+- Unit + contract total: **447 passing** (was 423).
 
 ## [0.3.0] - 2026-04-22 — **Phase 1.5: Realtime + Observability**
 

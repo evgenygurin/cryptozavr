@@ -46,10 +46,11 @@ class TestRealtimeSubscriber:
         channel.subscribe.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_subscribe_filters_by_venue(
+    async def test_subscribe_omits_filter_by_default(
         self,
         async_supabase_client,
     ) -> None:
+        """tickers_live has no venue_id column — default must NOT filter."""
         client, channel = async_supabase_client
         subscriber = RealtimeSubscriber(client=client)
         await subscriber.subscribe_tickers(
@@ -57,8 +58,22 @@ class TestRealtimeSubscriber:
             callback=lambda _: None,
         )
         _, kwargs = channel.on_postgres_changes.call_args
-        assert "filter" in kwargs
-        assert "venue_id=eq.coingecko" in kwargs["filter"]
+        assert "filter" not in kwargs
+
+    @pytest.mark.asyncio
+    async def test_subscribe_honors_explicit_filter_expr(
+        self,
+        async_supabase_client,
+    ) -> None:
+        client, channel = async_supabase_client
+        subscriber = RealtimeSubscriber(client=client)
+        await subscriber.subscribe_tickers(
+            venue_id="kucoin",
+            callback=lambda _: None,
+            filter_expr="symbol_id=eq.42",
+        )
+        _, kwargs = channel.on_postgres_changes.call_args
+        assert kwargs["filter"] == "symbol_id=eq.42"
 
     @pytest.mark.asyncio
     async def test_callback_is_wired_to_channel(

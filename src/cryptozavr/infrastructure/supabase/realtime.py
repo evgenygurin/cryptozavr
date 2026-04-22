@@ -9,9 +9,12 @@ so a TickerSyncWorker can periodically refresh the subscribed tickers.
 The legacy subscribe_tickers (per-venue) stays for compatibility; it
 does NOT populate subscriptions().
 
-Note: the filter `venue_id=eq.<venue>` stays — tickers_live uses
-symbol_id as PK and venue_id lives in the symbols join. The channel
-still opens; downstream callback handles symbol-level routing.
+Note: `cryptozavr.tickers_live` has `symbol_id` as PK and no `venue_id`
+column — Supabase Realtime filters are single-column, so a per-venue
+filter is impossible without a schema change. The default filter is
+therefore `None`; callers that need per-venue routing resolve the venue
+inside their callback (CacheInvalidator does pessimistic all-venue
+invalidation when the payload lacks a venue hint).
 """
 
 from __future__ import annotations
@@ -56,18 +59,26 @@ class RealtimeSubscriber:
         self,
         venue_id: str,
         callback: TickerCallback,
+        *,
+        filter_expr: str | None = None,
     ) -> SubscriptionHandle:
-        """Open a filtered postgres_changes channel for a venue's tickers.
+        """Open a postgres_changes channel on cryptozavr.tickers_live.
 
-        Per-venue (legacy) subscription; does NOT populate `subscriptions()`.
-        Use `subscribe_ticker(venue_id, symbol, callback)` for per-symbol
-        tracking that TickerSyncWorker can refresh.
+        `venue_id` is kept as a label for the channel_id (so multiple
+        subscribers can coexist), but since `tickers_live` has no
+        `venue_id` column the default `filter_expr=None` subscribes to
+        every row change. Callers that have a real filterable column
+        (`symbol_id` after a schema change, for example) can pass it
+        explicitly. Does NOT populate `subscriptions()` — use
+        `subscribe_ticker(venue_id, symbol, callback)` for per-symbol
+        tracking.
         """
         channel_id = f"cryptozavr-tickers-{venue_id}"
         await self._open_and_register(
             channel_id=channel_id,
             venue_id=venue_id,
             callback=callback,
+            filter_expr=filter_expr,
         )
         return SubscriptionHandle(channel_id=channel_id)
 
@@ -84,6 +95,7 @@ class RealtimeSubscriber:
             channel_id=channel_id,
             venue_id=venue_id,
             callback=callback,
+            filter_expr=None,
         )
         self._ticker_subscriptions.append(
             TickerSubscription(
@@ -121,18 +133,21 @@ class RealtimeSubscriber:
         channel_id: str,
         venue_id: str,
         callback: TickerCallback,
+        filter_expr: str | None = None,
     ) -> None:
         if self._client is None:
             raise RuntimeError(
                 "RealtimeSubscriber initialised without a supabase client",
             )
         channel = self._client.channel(channel_id)
-        channel.on_postgres_changes(
-            event="*",
-            schema="cryptozavr",
-            table="tickers_live",
-            filter=f"venue_id=eq.{venue_id}",
-            callback=callback,
-        )
+        kwargs: dict[str, object] = {
+            "event": "*",
+            "schema": "cryptozavr",
+            "table": "tickers_live",
+            "callback": callback,
+        }
+        if filter_expr is not None:
+            kwargs["filter"] = filter_expr
+        channel.on_postgres_changes(**kwargs)
         await channel.subscribe()
         self._channels[channel_id] = channel

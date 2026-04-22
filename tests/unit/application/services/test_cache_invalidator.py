@@ -62,15 +62,32 @@ def test_on_ticker_change_ignores_unknown_venue() -> None:
     assert provider.invalidations == 0
 
 
-def test_on_ticker_change_ignores_payload_without_venue() -> None:
+def test_on_ticker_change_pessimistic_when_venue_missing() -> None:
+    """tickers_live has no venue_id column, so a callback may see a payload
+    with only symbol_id. The invalidator must then drop ticker caches on
+    every known venue rather than silently do nothing (reviewer finding)."""
+    kucoin = _FakeCacheProvider()
+    coingecko = _FakeCacheProvider()
+    invalidator = CacheInvalidator(
+        subscriber=_make_subscriber(),
+        providers={VenueId.KUCOIN: kucoin, VenueId.COINGECKO: coingecko},
+    )
+
+    invalidator.on_ticker_change({"record": {"symbol_id": 42}})
+
+    assert kucoin.invalidations == 1
+    assert coingecko.invalidations == 1
+
+
+def test_on_ticker_change_ignores_non_dict_payload() -> None:
     provider = _FakeCacheProvider()
     invalidator = CacheInvalidator(
         subscriber=_make_subscriber(),
         providers={VenueId.KUCOIN: provider},
     )
 
-    invalidator.on_ticker_change({"record": {"symbol_id": 42}})
     invalidator.on_ticker_change("not a dict")
+    invalidator.on_ticker_change(None)
 
     assert provider.invalidations == 0
 

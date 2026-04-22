@@ -1,7 +1,9 @@
-"""FastMCP server bootstrap: echo + 4 market-data tools.
+"""FastMCP server bootstrap.
 
-Uses FastMCP v3 lifespan (dict-yield) + mask_error_details for
-production safety.
+Wires 16 tools (echo, 4 market-data, resolve_symbol, 4 analytics,
+fetch_ohlcv_history, 5 catalog with structuredContent DTOs),
+4 static resources + 1 URI-template (symbols/{venue}), and 2 prompts
+on a dict-yielding lifespan with `mask_error_details=True`.
 """
 
 from __future__ import annotations
