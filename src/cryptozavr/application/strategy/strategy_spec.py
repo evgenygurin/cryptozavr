@@ -18,6 +18,9 @@ from cryptozavr.application.strategy.enums import (
     PriceSource,
     StrategySide,
 )
+from cryptozavr.domain.symbols import Symbol
+from cryptozavr.domain.value_objects import Timeframe
+from cryptozavr.domain.venues import VenueId
 
 
 class IndicatorRef(BaseModel):
@@ -79,3 +82,19 @@ class StrategyExit(BaseModel):
         if self.stop_loss_pct is not None and self.stop_loss_pct <= 0:
             raise ValueError(f"StrategyExit.stop_loss_pct must be > 0 (got {self.stop_loss_pct!r})")
         return self
+
+
+class StrategySpec(BaseModel):
+    # `arbitrary_types_allowed` because Symbol is a frozen dataclass, not a
+    # Pydantic model. Pydantic validates it by isinstance check only.
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    name: str = Field(min_length=1, max_length=128)
+    description: str = Field(max_length=1024)
+    venue: VenueId
+    symbol: Symbol
+    timeframe: Timeframe
+    entry: StrategyEntry
+    exit: StrategyExit
+    size_pct: Decimal = Field(gt=0, le=1)
+    version: int = Field(default=1, ge=1)

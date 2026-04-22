@@ -216,11 +216,12 @@ Rationale for Builder vs direct constructor:
 5. **Cloning** — rely on Pydantic's `model_copy(update={...})`. No
    explicit `Builder.from_spec`; add only if a 2D MCP tool actually
    needs it (YAGNI for 2A).
-6. **Timeframe-vs-period mismatch** — emit `warnings.warn(...)` with
-   `UserWarning` category when an indicator period exceeds a
-   reasonable-warm-up threshold for the chosen timeframe
-   (`period * timeframe.to_milliseconds() > 7 days`). Hard-erroring
-   here would block valid long-lookback strategies (e.g. 200-day SMA
-   on daily candles is the canonical long-trend filter).
+6. **Timeframe-vs-period mismatch** — **deferred**. The initially
+   proposed "warn if warm-up > 7 days" heuristic contradicts itself:
+   a 200-day SMA on daily candles (200 days of warm-up) is the
+   canonical long-trend filter and shouldn't warn, yet would trip the
+   7-day bound. Without a principled line between "legit long lookback"
+   and "config typo", 2A ships no warm-up warning. Revisit in 2A+1 when
+   real user feedback tells us what "weird" actually looks like.
 
 Ready to proceed to `superpowers:writing-plans`.
