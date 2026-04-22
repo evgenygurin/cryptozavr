@@ -135,11 +135,21 @@ def register_watch_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="wait_for_event",
         description=(
-            "Block until a new event appears on the watch, the watch "
-            "terminates, or the timeout expires — then return the "
-            "accumulated snapshot with events[since_event_index:]. "
-            "Long-poll pattern: reaction < 100ms to real events, zero "
-            "busy-polling. Use instead of check_watch + sleep."
+            "Block up to `timeout_sec` until a new event appears, the watch "
+            "terminates, or the timeout expires. Reaction on a real event: "
+            "<100ms. \n"
+            "\n"
+            "USAGE PATTERN: short windows in a loop, not one giant call.\n"
+            "  Example: /loop wait_for_event(watch_id, since_event_index=N, "
+            "           timeout_sec=30)\n"
+            "On empty return (status=running, events=[]) call again with the "
+            "same since_event_index. On a new event the next_event_index in "
+            "the response is your new cursor. On a terminal status, stop "
+            "looping — the paper trade has been auto-closed.\n"
+            "\n"
+            "DO NOT pass timeout_sec > 60 unless you want the UI to show "
+            "a giant spinner. The server keeps the watch running between "
+            "calls; you lose nothing by polling short."
         ),
         tags={"market", "position", "streaming", "long-poll"},
         annotations={
@@ -166,10 +176,14 @@ def register_watch_tools(mcp: FastMCP) -> None:
             int,
             Field(
                 ge=1,
-                le=600,
-                description="Max seconds to block before returning (default 300).",
+                le=90,
+                description=(
+                    "Max seconds to block (default 30, max 90). Keep it short — "
+                    "long polls past ~60s look frozen in the client UI. Re-invoke "
+                    "the tool in a loop (`/loop wait_for_event`) instead."
+                ),
             ),
-        ] = 300,
+        ] = 30,
         watcher: PositionWatcher = _WATCHER,
     ) -> WatchStateDTO:
         await ctx.info(
