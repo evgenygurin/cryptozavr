@@ -4,6 +4,19 @@
 > to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
 
+> **⚠ Execution-time deviations (2026-04-22):**
+>
+> - **Task 5, warm-up warning**: deferred during execution. The proposed
+>   `period × timeframe > 7 days` heuristic contradicted the 200-day-SMA-on-
+>   daily invariant it was meant to allow. The two tests below
+>   (`test_long_period_on_short_timeframe_emits_warning`,
+>   `test_long_period_on_long_timeframe_no_warning`) were dropped; no
+>   `warnings.warn(...)` call in the shipped `strategy_spec.py`. See the
+>   locked-decisions update in the design spec. To revisit: collect actual
+>   user-error examples from 2B/2D usage and design a principled threshold.
+> - Final test count: **40** (enum 5 + indicator_ref 6 + condition 4 +
+>   entry 3 + exit 5 + spec 11 + builder 6) — slightly over the ≥40 target.
+
 **Goal:** Ship `cryptozavr.application.strategy` — a frozen Pydantic
 `StrategySpec` DTO plus a fluent, immutable `StrategySpecBuilder` — as a
 standalone analytics-independent building block for future 2B backtest

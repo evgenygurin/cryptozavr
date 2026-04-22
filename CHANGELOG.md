@@ -19,7 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Builder) shipped.
 - Cross-field invariants: non-empty entry conditions, at-least-one exit
   path (conditions / take_profit / stop_loss), `size_pct ∈ (0, 1]`,
-  finite-Decimal `Condition.rhs`, NaN rejection, `period ∈ [1, 500]`.
+  positive TP/SL when present, finite-Decimal `Condition.rhs`,
+  `period ∈ [1, 500]`. Warm-up-vs-timeframe heuristic deferred to 2A+1
+  (no principled line between legit long-lookback and config typo).
 - Reuses `domain.value_objects.Timeframe`, `domain.venues.VenueId`,
   `domain.symbols.Symbol` (no parallel enums).
 - 40 unit tests covering happy path, invariants, immutability,
