@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now copies `id` into `category_id` so `CategoryDTO.from_provider` stops raising
   `KeyError` against the current `/coins/categories` response shape. Previously
   surfaced as a generic "Error reading resource" (`mask_error_details=True`).
+- **Uniform `application/json` MIME on all resources**: every resource now
+  returns `ResourceResult(ResourceContent(content=json.dumps(...),
+  mime_type="application/json"))` per FastMCP v3 `servers/resources.mdx`
+  §ResourceResult. Previously `cryptozavr://symbols/{venue}` was served as
+  `text/plain` because FastMCP drops the decorator-level `mime_type` hint
+  for URI-template resources; clients can now render the JSON payload
+  natively instead of as an escaped string.
 
 ### Tests
 - +14 unit tests: `trades_to_domain` (4), provider trades happy-path +
