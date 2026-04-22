@@ -113,10 +113,21 @@ class CCXTProvider(BaseProvider):
 
     async def _fetch_order_book_raw(self, symbol: Symbol, depth: int) -> Any:
         safe_depth = self._snap_order_book_depth(depth)
-        return await self._exchange.fetch_order_book(
+        raw = await self._exchange.fetch_order_book(
             symbol.native_symbol,
             limit=safe_depth,
         )
+        # Venue APIs may return more levels than the caller requested (KuCoin
+        # only accepts limit ∈ {20, 100} — we snap up at the transport layer,
+        # then slice back down here so the client's `depth` is honored
+        # end-to-end instead of leaking the venue-enforced minimum.
+        if isinstance(raw, dict):
+            raw = {
+                **raw,
+                "bids": list(raw.get("bids", []))[:depth],
+                "asks": list(raw.get("asks", []))[:depth],
+            }
+        return raw
 
     def _snap_order_book_depth(self, depth: int) -> int:
         """Map requested depth to a venue-allowed limit.
