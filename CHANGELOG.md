@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-22 — **MVP closure**
+
+### Added — M3.4 History streaming + SessionExplainer
+
+Closes the MVP tool surface and ships the canonical `{data, quality, reasoning}` envelope from the spec.
+
+**Services (L4)**
+- `OHLCVPaginator` — Iterator-pattern async iterator over `[since_ms, until_ms)`. Walks the window in `chunk_size` candle steps via `OhlcvService.fetch_ohlcv`, advancing the cursor by `last_opened_at + timeframe_ms`. Short-circuits on empty chunks and has a safety guard against no-progress cursors. `total_chunks_estimate()` helper drives progress UX.
+
+**Envelope helper**
+- `src/cryptozavr/mcp/explainer.py::build_envelope(data, quality, reason_codes, query_id, notes)` — stateless wrapper around tool output. Pydantic BaseModels dump via `model_dump(mode="json")`; dicts pass through. Auto-generates a 12-char `query_id` when unset. Existing tools (ticker/ohlcv/etc.) untouched — only `fetch_ohlcv_history` opts into the envelope; others can migrate later if desired.
+
+**DTOs**
+- `OHLCVHistoryDTO` — wire format for streamed history (venue / symbol / timeframe / range / candles / chunks_fetched / reason_codes). Decimal-safe via `model_dump(mode="json")`.
+
+**MCP surface**
+- Tool: `fetch_ohlcv_history(venue, symbol, timeframe, since_ms, until_ms, chunk_size=500, force_refresh=False)` → envelope `{data: OHLCVHistoryDTO, quality, reasoning}`. Iterates the paginator, calls `ctx.report_progress(chunk_n, total_est, msg)` between each fetch, captures latest quality. `timeout=180s`, `meta={mode: history, version}`. Inverted ranges and unknown timeframes surface as `ToolError` via `domain_to_tool_error`.
+
+**Slash commands**
+- `/cryptozavr:history <venue> <symbol> <timeframe> <since_ms> <until_ms> [chunk_size]` — drives streaming with a Window / Price action / Quality / Provenance layout.
+- `/cryptozavr:health` banner lists all 11 tools.
+
+**Plugin surface (final MVP)**
+- **Tools (11)**: echo, get_ticker, get_ohlcv, get_order_book, get_trades, resolve_symbol, compute_vwap, identify_support_resistance, volatility_regime, analyze_snapshot, **fetch_ohlcv_history**
+- **Prompts (2)**: research_symbol, risk_check
+- **Resources (4)**: cryptozavr://venues, ://symbols/{venue}, ://trending, ://categories
+- **Slash commands (8)**: health, ticker, ohlcv, research, resolve, trending, analyze, **history**
+
+### Tests
+- +21 unit tests (OHLCVPaginator 7, OHLCVHistoryDTO 2, SessionExplainer 5, fetch_ohlcv_history 6, server startup +1)
+- Unit total: **370** (was 349 after M3.3)
+- Grand total: 370 unit + 5 contract + 14 live integration = **389**
+
+### Commits
+- `feat(application): add OHLCVPaginator iterator for history streaming` (5861147)
+- `feat(mcp): add OHLCVHistoryDTO for streamed history` (0809040)
+- `feat(mcp): add SessionExplainer envelope helper` (3028f41)
+- `feat(mcp): add fetch_ohlcv_history tool (streaming + envelope)` (5597174)
+- `feat(mcp): wire fetch_ohlcv_history into server + /history command` (a4e7b70)
+
+---
+
+**MVP scope closed.** All 17 GoF patterns from the spec are in code (Strategy, Template Method, Adapter, Bridge, Decorator×4, Chain of Responsibility×5, State, Factory Method, Singleton via DI, Flyweight, Facade, Iterator, plus the SessionExplainer envelope). Next milestones (phase 2+) live outside MVP scope: Builder for `StrategySpec`, Visitor for backtest analytics, Memento for decision replay, background tasks via `task_meta`.
+
 ## [0.1.4] - 2026-04-22
 
 ### Added — M3.3 Analytics MCP tools
