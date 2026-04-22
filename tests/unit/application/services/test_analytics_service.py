@@ -17,6 +17,7 @@ from cryptozavr.application.services.ohlcv_service import (
     OhlcvService,
 )
 from cryptozavr.application.strategies.base import AnalysisResult
+from cryptozavr.domain.exceptions import SymbolNotFoundError
 from cryptozavr.domain.market_data import OHLCVCandle, OHLCVSeries
 from cryptozavr.domain.quality import (
     Confidence,
@@ -158,7 +159,6 @@ class TestAnalyticsService:
     @pytest.mark.asyncio
     async def test_analyze_reraises_ohlcv_errors(self) -> None:
         """SymbolNotFoundError from OhlcvService propagates without catching."""
-        from cryptozavr.domain.exceptions import SymbolNotFoundError
 
         mock_ohlcv_service = AsyncMock(spec=OhlcvService)
         mock_ohlcv_service.fetch_ohlcv.side_effect = SymbolNotFoundError(
