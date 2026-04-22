@@ -36,6 +36,7 @@ from cryptozavr.mcp.tools.strategy_read_only import register_strategy_read_only_
 from cryptozavr.mcp.tools.ticker import register_ticker_tool
 from cryptozavr.mcp.tools.trades import register_trades_tool
 from cryptozavr.mcp.tools.validate_strategy import register_validate_strategy_tool
+from cryptozavr.mcp.tools.watch import register_watch_tools
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,6 +98,7 @@ def build_server(settings: Settings) -> FastMCP:
     register_strategy_read_only_tools(mcp)
     register_strategy_compute_tools(mcp)
     register_risk_tools(mcp)
+    register_watch_tools(mcp)
     register_prompts(mcp)
     register_resources(mcp)
     register_venue_health_resource(mcp)
