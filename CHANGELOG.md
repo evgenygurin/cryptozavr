@@ -5,13 +5,38 @@ All notable changes to cryptozavr will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] — 2026-04-22
 
-### Added
+### Added — Phase A: Paper Trading Ledger
+
+- `paper_open_trade`, `paper_close_trade`, `paper_cancel_trade`,
+  `paper_reset`, `paper_set_bankroll` MCP tools.
+- Resources: `cryptozavr://paper/ledger`, `/open_trades`, `/stats`,
+  `/trades/{id}`.
+- Prompts: `paper_scalp_session`, `paper_review`,
+  `discretionary_watch_loop`.
+- `PositionWatcher.start()` now accepts an `on_terminal` callback
+  that fires once on stop_hit / take_hit / timeout — auto-closes
+  paper trades without LLM involvement.
+- Migration `00000000000090_paper_trades.sql` — `cryptozavr.paper_trades`
+  table, `paper_stats` view, join `supabase_realtime` publication.
+- Resume-on-startup: running paper trades re-attach live watches after
+  MCP subprocess restart; unrecoverable ones marked `abandoned`.
+
+### Added — 0.3.x carry-over
+
 - Position watcher: `watch_position`, `check_watch`, `stop_watch` MCP
   tools for real-time event-driven monitoring of active paper-trading
   positions via `ccxt.pro.kucoin` WebSocket. Events: stop/take hit,
   timeout (terminal), plus fire-once approach/breakeven signals.
+- `wait_for_event` long-poll tool — blocks server-side until a new
+  event fires; <100ms wake latency vs 60s+ with polling.
+
+### Fixed
+
+- `pg_pool` default size bumped 10→25, `acquire_timeout=2s`,
+  `command_timeout=15s` — absorbs parallel tool-call bursts without
+  killing the stdio MCP subprocess.
 
 ### Added — Phase 2 Sub-project A — BacktestEngine
 

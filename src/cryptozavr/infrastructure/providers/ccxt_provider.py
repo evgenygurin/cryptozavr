@@ -9,6 +9,7 @@ import ccxt.async_support as ccxt_async
 from cryptozavr.domain.exceptions import (
     ProviderUnavailableError,
     RateLimitExceededError,
+    SymbolNotFoundError,
 )
 from cryptozavr.domain.market_data import (
     OHLCVSeries,
@@ -172,8 +173,6 @@ class CCXTProvider(BaseProvider):
         if isinstance(exc, ccxt_async.NetworkError):
             return ProviderUnavailableError(str(exc))
         if isinstance(exc, ccxt_async.BadSymbol):
-            from cryptozavr.domain.exceptions import SymbolNotFoundError
-
             return SymbolNotFoundError(
                 user_input=str(exc).split("'")[1] if "'" in str(exc) else str(exc),
                 venue=self.venue_id.value,
