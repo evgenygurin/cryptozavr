@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-22 — **Phase 1.5: Realtime + Observability**
+
+Ships the observability substrate and realtime-driven cache invalidation that
+Phase 2 trading logic will depend on.
+
+**Infrastructure**
+- `MetricsRegistry` — thread-safe in-memory Prometheus-compatible registry.
+  Counters + cumulative-bucket histograms with Prometheus "le" semantics.
+  `snapshot()` returns a JSON-serialisable dict ready for a future text
+  exporter.
+- `MetricsDecorator` — 5th decorator in the provider chain. Classifies every
+  call as `ok` / `rate_limited` / `timeout` / `error`, emits
+  `provider_calls_total{venue,endpoint,outcome}` and
+  `provider_call_duration_ms{venue,endpoint}` with buckets
+  `[50, 100, 250, 500, 1000, 2500, 5000, +Inf]` ms.
+- `ProviderFactory.metrics_registry` — threads a single registry into the
+  decorator chain (Logging > Caching > RateLimit > Retry > Metrics > base).
+- `InMemoryCachingDecorator.invalidate_tickers()` — targeted eviction of
+  ticker cache keys; leaves OHLCV / order book buckets untouched.
+- `RealtimeSubscriber.subscribe_ticker(venue, symbol, callback)` +
+  `subscriptions()` accessor — per-symbol tracking so background workers
+  can enumerate the live set. Legacy `subscribe_tickers(venue)` still works.
+
+**Application**
+- `HealthMonitor` — periodic probe loop (default 60s). For each
+  `VenueId`, runs the supplied `HealthProbe`, updates `VenueState`
+  through `on_request_succeeded` / `on_request_failed` and emits
+  `venue_health_check_total{venue,outcome}`. Idempotent start/stop.
+- `VenueState.last_checked_at_ms` + `mark_probe_performed(now_ms)` —
+  consumed by the new resource to render `last_checked_ms`.
+- `TickerSyncWorker` — background asyncio task (default 30s). Reads
+  `RealtimeSubscriber.subscriptions()` and force-refreshes every ticker
+  through `TickerService`. No-op when there are no subscriptions.
+- `CacheInvalidator` — routes Supabase Realtime `tickers_live` row
+  changes to `providers[venue].invalidate_tickers()`. Exposes
+  `start()` that opens subscribe_tickers channels per venue; failures
+  are logged, not raised.
+
+**MCP surface**
+- Resource `cryptozavr://venue_health` — JSON `{venues: [{venue, state,
+  last_checked_ms}]}`. `state` is `healthy` / `degraded` / `down`
+  (RATE_LIMITED collapses into `degraded`).
+- `/cryptozavr:health` command now also reads this resource and reports
+  per-venue state + last_checked_ms alongside the echo reachability
+  check.
+
+**Lifespan wiring**
+- `build_production_service` assembles MetricsRegistry → HealthMonitor →
+  TickerSyncWorker → CacheInvalidator and starts them inside the
+  lifespan. Start failures are logged per-service so the MCP subprocess
+  still boots when Supabase Realtime is offline. Cleanup stops the
+  background services first (cache invalidator → ticker sync → health
+  monitor) before tearing HTTP / gateway / pg pool.
+- New `LIFESPAN_KEYS`: `metrics_registry`, `health_monitor`,
+  `ticker_sync_worker`, `cache_invalidator`, `venue_states`.
+
+**Plugin surface additions**
+- SessionStart banner now points at `cryptozavr://venue_health`.
+- Skills: `venue-debug` (walks the 5-layer chain to pinpoint whether a
+  venue failure is cache staleness, rate limiting, transport or upstream
+  downtime) and `post-session-reflection` (3-bullet produced / decided /
+  next wrap-up).
+
+### Tests
+- +50 unit tests: MetricsRegistry 5 / MetricsDecorator 7 /
+  HealthMonitor 9 / RealtimeSubscriber 3 / TickerSyncWorker 5 /
+  CacheInvalidator 8 / venue_health resource 5 / cache invalidation 2 /
+  VenueState probe timestamp 2 / ProviderFactory metrics 1 /
+  plus extended test_analytics_service import hoist.
+- Unit + contract total: **423 passing** (was 373).
+
+### Commits (atomic on `feat/phase-1.5-ralph`)
+- `feat(infrastructure): add MetricsDecorator (Prometheus counters/histograms)`
+- `feat(application): add HealthMonitor service`
+- `feat(infrastructure): add per-symbol subscribe_ticker to RealtimeSubscriber`
+- `feat(application): add TickerSyncWorker background task`
+- `feat(mcp): add cryptozavr://venue_health resource`
+- `feat(infrastructure): invalidate ticker cache on realtime tickers_live updates`
+- `feat(plugin): extend SessionStart banner with venue_health hint`
+- `feat(plugin): add venue-debug + post-session-reflection skills`
+- `feat(mcp): wire observability background services into lifespan`
+- `docs(plugin): /cryptozavr:health also reads cryptozavr://venue_health`
+
 ## [0.2.0] - 2026-04-22 — **MVP closure**
 
 ### Added — M3.4 History streaming + SessionExplainer
