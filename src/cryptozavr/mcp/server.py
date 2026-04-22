@@ -20,6 +20,7 @@ from pydantic import Field
 
 from cryptozavr import __version__
 from cryptozavr.mcp.bootstrap import build_production_service
+from cryptozavr.mcp.prompts.paper import register_paper_prompts
 from cryptozavr.mcp.prompts.research import register_prompts
 from cryptozavr.mcp.resources.catalogs import register_resources
 from cryptozavr.mcp.resources.paper import register_paper_resources
@@ -103,6 +104,7 @@ def build_server(settings: Settings) -> FastMCP:
     register_watch_tools(mcp)
     register_paper_tools(mcp, bankroll_initial=settings.paper_bankroll_initial)
     register_prompts(mcp)
+    register_paper_prompts(mcp)
     register_resources(mcp)
     register_paper_resources(mcp, bankroll_initial=settings.paper_bankroll_initial)
     register_venue_health_resource(mcp)
