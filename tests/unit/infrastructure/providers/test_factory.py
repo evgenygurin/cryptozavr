@@ -5,11 +5,15 @@ from __future__ import annotations
 import pytest
 
 from cryptozavr.domain.venues import VenueId
+from cryptozavr.infrastructure.observability.metrics import MetricsRegistry
 from cryptozavr.infrastructure.providers.decorators.caching import (
     InMemoryCachingDecorator,
 )
 from cryptozavr.infrastructure.providers.decorators.logging import (
     LoggingDecorator,
+)
+from cryptozavr.infrastructure.providers.decorators.metrics import (
+    MetricsDecorator,
 )
 from cryptozavr.infrastructure.providers.decorators.rate_limit import (
     RateLimitDecorator,
@@ -78,6 +82,35 @@ async def test_create_coingecko_returns_wrapped_provider(
         assert isinstance(provider, LoggingDecorator)
     finally:
         await http_registry.close_all()
+
+
+@pytest.mark.asyncio
+async def test_factory_inserts_metrics_decorator_when_registry_provided(
+    rate_registry: RateLimiterRegistry,
+) -> None:
+    metrics = MetricsRegistry()
+    factory = ProviderFactory(
+        http_registry=HttpClientRegistry(),
+        rate_registry=rate_registry,
+        metrics_registry=metrics,
+    )
+    state = VenueState(VenueId.KUCOIN)
+    provider = factory.create_kucoin(state=state, exchange=_FakeExchange())
+
+    # Chain: Logging > Caching > RateLimit > Retry > Metrics > base
+    retry = provider._inner._inner._inner
+    assert isinstance(retry, RetryDecorator)
+    assert isinstance(retry._inner, MetricsDecorator)
+
+    # A successful load_markets should bump the Prometheus counter.
+    await provider.load_markets()
+    snap = metrics.snapshot()
+    assert any(
+        c["name"] == "provider_calls_total"
+        and c["labels"].get("endpoint") == "load_markets"
+        and c["labels"].get("outcome") == "ok"
+        for c in snap["counters"]
+    )
 
 
 @pytest.mark.asyncio

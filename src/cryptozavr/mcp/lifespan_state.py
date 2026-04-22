@@ -47,6 +47,10 @@ class _LifespanKeys:
     discovery_service: str = "discovery_service"
     registry: str = "registry"
     venue_states: str = "venue_states"
+    metrics_registry: str = "metrics_registry"
+    health_monitor: str = "health_monitor"
+    ticker_sync_worker: str = "ticker_sync_worker"
+    cache_invalidator: str = "cache_invalidator"
 
 
 LIFESPAN_KEYS = _LifespanKeys()

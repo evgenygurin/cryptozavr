@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from cryptozavr.domain.venues import VenueId
+from cryptozavr.infrastructure.observability.metrics import MetricsRegistry
 from cryptozavr.infrastructure.providers.ccxt_provider import CCXTProvider
 from cryptozavr.infrastructure.providers.coingecko_provider import (
     CoinGeckoProvider,
@@ -14,6 +15,9 @@ from cryptozavr.infrastructure.providers.decorators.caching import (
 )
 from cryptozavr.infrastructure.providers.decorators.logging import (
     LoggingDecorator,
+)
+from cryptozavr.infrastructure.providers.decorators.metrics import (
+    MetricsDecorator,
 )
 from cryptozavr.infrastructure.providers.decorators.rate_limit import (
     RateLimitDecorator,
@@ -44,6 +48,7 @@ class ProviderFactory:
         ticker_ttl: float = 5.0,
         ohlcv_ttl: float = 60.0,
         order_book_ttl: float = 3.0,
+        metrics_registry: MetricsRegistry | None = None,
     ) -> None:
         self._http = http_registry
         self._rate = rate_registry
@@ -53,6 +58,7 @@ class ProviderFactory:
         self._ticker_ttl = ticker_ttl
         self._ohlcv_ttl = ohlcv_ttl
         self._order_book_ttl = order_book_ttl
+        self._metrics = metrics_registry
 
     def create_kucoin(
         self,
@@ -90,8 +96,11 @@ class ProviderFactory:
 
     def _wrap(self, base: Any, *, venue_id: str) -> LoggingDecorator:
         limiter = self._rate.get(venue_id)
+        inner: Any = base
+        if self._metrics is not None:
+            inner = MetricsDecorator(inner, registry=self._metrics)
         wrapped: Any = RetryDecorator(
-            base,
+            inner,
             max_attempts=self._retry_max_attempts,
             base_delay=self._retry_base_delay,
             jitter=self._retry_jitter,
