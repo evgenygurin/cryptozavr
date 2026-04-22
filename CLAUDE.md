@@ -60,6 +60,34 @@ Non-interactive одной командой:
 echo "/cryptozavr:health" | claude -p --model claude-sonnet-4-6 --plugin-dir /Users/laptop/dev/cryptozavr
 ```
 
+## Live-plugin dev workflow — версия и кеш
+
+**Перед любой live MCP-проверкой** сравни `echo().version` с `cryptozavr.__version__`. Если не сходится — cache плагина stale:
+
+```bash
+claude plugin list | grep cryptozavr            # видимая версия
+claude plugin marketplace update cryptozavr-marketplace
+claude plugin update cryptozavr@cryptozavr-marketplace   # tag → cache
+```
+
+**Если `claude` уже запущен** — он держит `--plugin-dir .../cryptozavr/<старая>` в argv; `plugin update` добавляет `/<новая>/` *рядом*, subprocess не перенаправляется. В текущей сессии:
+
+```bash
+cd ~/.claude/plugins/cache/cryptozavr-marketplace/cryptozavr
+mv <stale> <stale>.backup && ln -s <new> <stale>     # symlink на новую
+pkill -f "cryptozavr-marketplace/cryptozavr/.*server\.py"   # Claude respawn'ит
+```
+
+**Live-sync code edits** (без bump версии): `cp <edited-file> ~/.claude/plugins/cache/cryptozavr-marketplace/cryptozavr/<current>/<same-path>` затем `pkill` subprocess. Чище — выйти из сессии и заново `claude --plugin-dir /Users/laptop/dev/cryptozavr`.
+
+**Sanity check PID цепочки:** `ps -ef | grep "cryptozavr-marketplace" | grep -v grep` — цепочка `sh → uv run → python`. Родительский `claude` (pid с `--plugin-dir`) НЕ трогать.
+
+## MCP resources vs tools — escape rule
+
+`@mcp.resource` → wire format `TextResourceContents.text: str`, любой вложенный JSON экранируется (`\"`) в raw client output. Для interactive views возвращай через `@mcp.tool` с Pydantic-DTO — FastMCP v3 наполняет `CallToolResult.structuredContent` native JSON-объектом. См. `src/cryptozavr/mcp/tools/catalog.py` как reference.
+
+Для resources: используй `ResourceResult(ResourceContent(content=json.dumps(...), mime_type="application/json"))` — это фиксит и MIME-drop на URI-template resources.
+
 ## Plan docs
 
 Все implementation plans — `docs/superpowers/plans/YYYY-MM-DD-*.md`. Читать свежий перед тем как стартовать связанную работу.
