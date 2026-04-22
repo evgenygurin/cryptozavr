@@ -50,6 +50,16 @@ async def test_build_server_registers_analytics_tools(settings: Settings) -> Non
     assert "analyze_snapshot" in tool_names
 
 
+async def test_build_server_registers_fetch_ohlcv_history(settings: Settings) -> None:
+    """fetch_ohlcv_history must be registered after server build."""
+    mcp = build_server(settings)
+
+    tools = await mcp.list_tools()
+    tool_names = {tool.name for tool in tools}
+
+    assert "fetch_ohlcv_history" in tool_names
+
+
 async def test_build_server_respects_current_mode(settings: Settings) -> None:
     """Server exposes current mode (for future mode-aware tools)."""
     build_server(settings)
