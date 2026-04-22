@@ -65,7 +65,7 @@ brainstorming — scope уже зафиксирован в MVP spec §11.3.
 
 **Dispatch:** 1 subagent + 1 light review.
 
-- [ ] Unit 2D-1 done
+- [x] Unit 2D-1 done (ca02223, light review APPROVED)
 
 ### Unit 2D-2: Read-only tools (list / explain / diff)
 
