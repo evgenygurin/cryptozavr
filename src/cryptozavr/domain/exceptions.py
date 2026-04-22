@@ -46,6 +46,14 @@ class VenueNotSupportedError(NotFoundError):
         super().__init__(f"venue {venue!r} is not supported")
 
 
+class TradeNotFoundError(NotFoundError):
+    """Raised when a paper trade id does not exist."""
+
+    def __init__(self, trade_id: str) -> None:
+        super().__init__(f"Trade not found: {trade_id!r}")
+        self.trade_id = trade_id
+
+
 # -- ProviderError family -------------------------------------------------
 class ProviderError(DomainError):
     """Provider-layer failures raised as domain exceptions."""
