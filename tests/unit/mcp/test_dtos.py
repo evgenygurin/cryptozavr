@@ -26,6 +26,7 @@ from cryptozavr.mcp.dtos import (
     AnalysisResultDTO,
     CategoryDTO,
     OHLCVCandleDTO,
+    OHLCVHistoryDTO,
     OHLCVSeriesDTO,
     OrderBookDTO,
     PriceSizeDTO,
@@ -189,6 +190,69 @@ class TestOHLCVSeriesDTO:
         assert payload["timeframe"] == "1m"
         assert len(payload["candles"]) == 2
         assert payload["candles"][0]["open"] == "100"
+
+
+class TestOHLCVHistoryDTO:
+    def test_from_chunks_builds_wire_payload(self) -> None:
+        candles = [
+            OHLCVCandleDTO(
+                opened_at_ms=1_700_000_000_000,
+                open=Decimal("100"),
+                high=Decimal("110"),
+                low=Decimal("95"),
+                close=Decimal("105"),
+                volume=Decimal("12"),
+                closed=True,
+            ),
+            OHLCVCandleDTO(
+                opened_at_ms=1_700_000_060_000,
+                open=Decimal("105"),
+                high=Decimal("115"),
+                low=Decimal("100"),
+                close=Decimal("110"),
+                volume=Decimal("8"),
+                closed=True,
+            ),
+        ]
+        dto = OHLCVHistoryDTO.from_chunks(
+            venue="kucoin",
+            symbol="BTC-USDT",
+            timeframe="1m",
+            range_start_ms=1_700_000_000_000,
+            range_end_ms=1_700_000_120_000,
+            candles=candles,
+            chunks_fetched=2,
+            reason_codes=["chunk:0", "chunk:1", "cache:hit"],
+        )
+        assert dto.chunks_fetched == 2
+        assert dto.range_end_ms == 1_700_000_120_000
+        assert len(dto.candles) == 2
+        assert dto.reason_codes == ["chunk:0", "chunk:1", "cache:hit"]
+
+    def test_serializes_to_json_decimals_as_strings(self) -> None:
+        dto = OHLCVHistoryDTO.from_chunks(
+            venue="kucoin",
+            symbol="BTC-USDT",
+            timeframe="1h",
+            range_start_ms=0,
+            range_end_ms=3_600_000,
+            candles=[
+                OHLCVCandleDTO(
+                    opened_at_ms=0,
+                    open=Decimal("1.234"),
+                    high=Decimal("2"),
+                    low=Decimal("1"),
+                    close=Decimal("1.5"),
+                    volume=Decimal("0.5"),
+                    closed=True,
+                ),
+            ],
+            chunks_fetched=1,
+            reason_codes=[],
+        )
+        payload = dto.model_dump(mode="json")
+        assert payload["candles"][0]["open"] == "1.234"
+        assert payload["chunks_fetched"] == 1
 
 
 @pytest.fixture

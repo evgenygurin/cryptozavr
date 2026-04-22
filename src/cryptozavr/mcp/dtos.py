@@ -117,6 +117,50 @@ class OHLCVSeriesDTO(BaseModel):
         )
 
 
+class OHLCVHistoryDTO(BaseModel):
+    """Wire-format streamed history for the fetch_ohlcv_history MCP tool.
+
+    Aggregates candles from multiple paginator chunks plus the combined
+    reason_codes audit trail. `chunks_fetched` lets callers see how many
+    upstream calls backed the response.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    venue: str
+    symbol: str
+    timeframe: str
+    range_start_ms: int
+    range_end_ms: int
+    candles: list[OHLCVCandleDTO]
+    chunks_fetched: int
+    reason_codes: list[str]
+
+    @classmethod
+    def from_chunks(
+        cls,
+        *,
+        venue: str,
+        symbol: str,
+        timeframe: str,
+        range_start_ms: int,
+        range_end_ms: int,
+        candles: list[OHLCVCandleDTO],
+        chunks_fetched: int,
+        reason_codes: list[str],
+    ) -> OHLCVHistoryDTO:
+        return cls(
+            venue=venue,
+            symbol=symbol,
+            timeframe=timeframe,
+            range_start_ms=range_start_ms,
+            range_end_ms=range_end_ms,
+            candles=candles,
+            chunks_fetched=chunks_fetched,
+            reason_codes=reason_codes,
+        )
+
+
 class PriceSizeDTO(BaseModel):
     """Wire-format order-book level (price + size)."""
 
