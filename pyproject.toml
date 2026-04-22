@@ -132,6 +132,10 @@ module = "pandas.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = "numpy.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "cryptozavr.application.services.discovery_service"
 ignore_missing_imports = true
 
