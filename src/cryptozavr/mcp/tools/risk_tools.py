@@ -266,7 +266,9 @@ def register_risk_tools(mcp: FastMCP) -> None:
             "Persist and activate a RiskPolicy. Inserts a new row; idempotent "
             "by BLAKE2b content_hash (re-saving the same policy returns the "
             "existing id). Auto-activates the inserted policy — any previously "
-            "active policy is deactivated in the same transaction."
+            "active policy is deactivated in the same transaction. "
+            "Note: max_daily_loss_pct is accepted and stored but not yet "
+            "enforced — its handler lands in a follow-up."
         ),
         tags={"risk", "phase-3"},
         timeout=30.0,

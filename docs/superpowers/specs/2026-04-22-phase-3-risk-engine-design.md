@@ -343,6 +343,7 @@ Single module with `register_risk_tools(mcp)` wiring all 6 tools. Depends inject
 - No approval flow / approval provider.
 - No execution integration — BacktestEngine does NOT call RiskEngine automatically. Users explicitly pass intents to `evaluate_trade_intent`. Auto-integration lands in Phase 4.
 - No `EVALUATE_RISK` capability in ModeGuard (deferred — MVP Mode.RESEARCH_ONLY already exposes these tools).
+- **`max_daily_loss_pct` is accepted in the DSL + persisted in jsonb but NOT enforced by any handler in Phase 3.** Daily-loss tracking requires `today_pnl_pct` on `TradeIntent` and a `DailyLossHandler` — follow-up task spawned from heavy review. The schema stays forward-compatible: existing policies keep the field, future handler plugs in without DB migration.
 
 ## Unit decomposition (deferred to writing-plans)
 
