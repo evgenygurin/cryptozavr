@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
 from fastmcp import FastMCP
+from fastmcp.server.transforms import ResourcesAsTools
 from pydantic import Field
 
 from cryptozavr import __version__
@@ -99,6 +100,13 @@ def build_server(settings: Settings) -> FastMCP:
     register_prompts(mcp)
     register_resources(mcp)
     register_venue_health_resource(mcp)
+    # MCP wire format serialises @mcp.resource payloads as
+    # TextResourceContents.text (a JSON string, always re-escaped on the
+    # wire). Adding FastMCP v3's ResourcesAsTools transform registers
+    # list_resources / read_resource as tools whose payload rides on
+    # CallToolResult.structuredContent — native JSON, no escaping, and
+    # tool-only clients can now read resources too.
+    mcp.add_transform(ResourcesAsTools(mcp))
     return mcp
 
 
