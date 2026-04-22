@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, cast
 from fastmcp.dependencies import CurrentContext
 
 if TYPE_CHECKING:
+    from cryptozavr.application.services.analytics_service import AnalyticsService
     from cryptozavr.application.services.discovery_service import DiscoveryService
     from cryptozavr.application.services.ohlcv_service import OhlcvService
     from cryptozavr.application.services.order_book_service import (
@@ -38,6 +39,7 @@ class _LifespanKeys:
     ohlcv_service: str = "ohlcv_service"
     order_book_service: str = "order_book_service"
     trades_service: str = "trades_service"
+    analytics_service: str = "analytics_service"
     subscriber: str = "subscriber"
     symbol_resolver: str = "symbol_resolver"
     discovery_service: str = "discovery_service"
@@ -64,6 +66,10 @@ def get_order_book_service(ctx: Any = _CTX) -> OrderBookService:
 
 def get_trades_service(ctx: Any = _CTX) -> TradesService:
     return cast("TradesService", ctx.lifespan_context[LIFESPAN_KEYS.trades_service])
+
+
+def get_analytics_service(ctx: Any = _CTX) -> AnalyticsService:
+    return cast("AnalyticsService", ctx.lifespan_context[LIFESPAN_KEYS.analytics_service])
 
 
 def get_subscriber(ctx: Any = _CTX) -> RealtimeSubscriber:
