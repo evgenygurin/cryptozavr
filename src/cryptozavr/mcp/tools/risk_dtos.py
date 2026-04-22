@@ -12,6 +12,7 @@ or (success, no payload).
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -56,7 +57,14 @@ class SymbolPayload(BaseModel):
 
 
 class TradeIntentPayload(BaseModel):
-    """Wire-format TradeIntent. Venue must match symbol.venue (cross-check)."""
+    """Wire-format TradeIntent.
+
+    The `symbol` field accepts EITHER:
+    - a plain native-symbol string like ``"BTC-USDT"`` (recommended — a
+      before-validator fills in ``venue/base/quote`` from the top-level
+      ``venue`` and the "-" split); or
+    - a full nested ``SymbolPayload`` object (legacy).
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -70,6 +78,31 @@ class TradeIntentPayload(BaseModel):
     current_balance: Decimal | None = None
     current_exposure_pct: Decimal | None = None
     today_pnl_pct: Decimal | None = Field(default=None, ge=-1, le=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_flat_symbol(cls, data: Any) -> Any:
+        """Allow `symbol` as a flat string like 'BTC-USDT' — expand it."""
+        if not isinstance(data, dict):
+            return data
+        sym = data.get("symbol")
+        if isinstance(sym, str):
+            native = sym.strip()
+            if "-" not in native:
+                raise ValueError("symbol string must be in BASE-QUOTE form, e.g. 'BTC-USDT'")
+            base, _, quote = native.partition("-")
+            if not base or not quote:
+                raise ValueError("symbol string must be non-empty BASE and QUOTE")
+            venue_val = data.get("venue", "kucoin")
+            data = dict(data)
+            data["symbol"] = {
+                "venue": venue_val,
+                "base": base.upper(),
+                "quote": quote.upper(),
+                "market_type": "spot",
+                "native_symbol": native.upper(),
+            }
+        return data
 
     @model_validator(mode="after")
     def _venue_matches(self) -> TradeIntentPayload:

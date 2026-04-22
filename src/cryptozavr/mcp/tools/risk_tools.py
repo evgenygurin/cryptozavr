@@ -314,9 +314,19 @@ def register_risk_tools(mcp: FastMCP) -> None:
         name="evaluate_trade_intent",
         description=(
             "Run the RiskEngine chain against a TradeIntent using the "
-            "currently active RiskPolicy. Returns a structured RiskDecision "
-            "with per-handler violations. Requires an active policy — returns "
-            "an error envelope otherwise."
+            "currently active RiskPolicy. Returns structured RiskDecision "
+            "with per-handler violations.\n"
+            "\n"
+            "MINIMAL intent payload:\n"
+            '  {"venue": "kucoin", "symbol": "BTC-USDT", "side": "long", '
+            '"size": "100"}\n'
+            "\n"
+            "Optional: leverage, reason, recent_losses, current_balance, "
+            "current_exposure_pct, today_pnl_pct.\n"
+            "\n"
+            "`symbol` accepts a flat string like 'BTC-USDT' — the server "
+            "expands it into the nested Symbol object. You can also pass "
+            "the full nested form for fine-grained control (market_type, etc)."
         ),
         tags={"risk", "read-only", "phase-3"},
         timeout=10.0,
@@ -341,9 +351,10 @@ def register_risk_tools(mcp: FastMCP) -> None:
         name="simulate_risk_check",
         description=(
             "Same as evaluate_trade_intent but accepts an optional "
-            "policy_override. If override is provided, it is used for this "
-            "call only and NEVER persisted. If omitted, falls back to the "
-            "currently active policy."
+            "policy_override. Payload: {intent: TradeIntent, policy_override?: "
+            "RiskPolicy}. `intent.symbol` accepts the flat 'BTC-USDT' "
+            "string form (see evaluate_trade_intent). policy_override is "
+            "used for this call only and NEVER persisted."
         ),
         tags={"risk", "read-only", "phase-3"},
         timeout=10.0,

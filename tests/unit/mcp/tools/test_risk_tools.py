@@ -352,6 +352,25 @@ class TestEvaluateTradeIntent:
         assert "no active risk policy" in payload["error"]
 
     @pytest.mark.asyncio
+    async def test_flat_symbol_string_accepted(self) -> None:
+        """LLMs pass symbol as plain 'BTC-USDT' — before-validator expands it."""
+        row = _make_policy_row()
+        repo = _mock_repo(get_active_return=row)
+        mcp = _build_server(repo=repo)
+        intent_flat: dict = {
+            **_valid_intent_payload(),
+            "symbol": "BTC-USDT",  # flat string instead of SymbolPayload
+        }
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "evaluate_trade_intent",
+                {"intent": intent_flat},
+            )
+        payload = _structured(result)
+        assert payload["error"] is None or "no active" not in (payload["error"] or "")
+        assert payload["decision"] is not None
+
+    @pytest.mark.asyncio
     async def test_malformed_intent_returns_error_with_location(self) -> None:
         row = _make_policy_row()
         repo = _mock_repo(get_active_return=row)
