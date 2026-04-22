@@ -4,6 +4,8 @@ You are continuing the cryptozavr plugin in `/Users/laptop/dev/cryptozavr/`.
 MVP v0.2.0 is shipped. Your job is to ship Phase 1.5: **Realtime + Observability**.
 Target tag: **v0.3.0**.
 
+**MANDATORY FIRST STEP (every iteration):** read `docs/llm-study-guide.md` §3 and match your current sub-task to one of the groups Г1..Г14. Read every link in that group **before** writing code. Do NOT guess FastMCP v3 APIs.
+
 **Working branch:** `feat/phase-1.5-ralph` (already created, already checked out). Do NOT merge to `main`. Push commits to `origin feat/phase-1.5-ralph`. The tag `v0.3.0` MUST be annotated on the feature branch head AFTER all work is complete; a human reviews the branch and merges it — your job ends at "tag pushed, PR-ready".
 
 ## Completion criteria (output `<promise>PHASE_1_5_COMPLETE</promise>` only when ALL are true)
