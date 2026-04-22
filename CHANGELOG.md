@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Phase 2 Sub-project A — BacktestEngine
+
+- `cryptozavr.application.backtest` package — hybrid backtesting engine
+  (vectorized indicators + streaming trade simulator).
+- 6 indicators (SMA/EMA/RSI/MACD/ATR/Volume) computed vectorized over a
+  candle DataFrame in one pass; `IndicatorFactory` interns same
+  `IndicatorRef` across entry + exit so a shared reference computes once.
+- `StrategyEvaluator` reads pre-computed Series per bar with
+  None-propagation on NaN (warm-up). Exit with zero conditions +
+  TP/SL-only emits `exit_signal=False` once warm.
+- `TradeSimulator`: single-position lifecycle, intrabar TP/SL collision
+  resolves worst-case-first (SL wins for LONG, TP wins for SHORT),
+  dust + `min_notional` skip with WARNING log, mark-to-market equity
+  per bar.
+- `PctSlippageModel` / `FixedBpsFeeModel` with Protocols so future
+  `MarketDrivenFeeModel` (CCXT-backed) drops in without changing
+  `TradeSimulator`.
+- `BacktestEngine.run(spec, candles, initial_equity, slippage, fees,
+  min_notional)` facade — validates DataFrame (≥2 candles + required
+  columns), wires everything, closes any open position at the last bar,
+  returns `BacktestReport` consumed by the 2C `BacktestAnalyticsService`
+  smoke-tested end-to-end.
+- New dep: `pandas>=2.2`.
+- ~95 new unit + E2E tests (sweep 555 → ~656).
+
 ### Added — Phase 2A — Declarative strategy DSL + Builder
 
 - `cryptozavr.application.strategy` package with 4 frozen Pydantic DTOs

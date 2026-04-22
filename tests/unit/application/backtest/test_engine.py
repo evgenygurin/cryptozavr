@@ -85,9 +85,18 @@ def test_run_raises_on_empty_candles() -> None:
         )
 
 
+def test_run_raises_on_single_candle() -> None:
+    """Single-candle backtest is semantically meaningless (no crossings,
+    no trades possible) and the TimeRange bounds would collide."""
+    engine = BacktestEngine()
+    df = candle_df(["100"])
+    with pytest.raises(ValidationError, match="at least 2 candles"):
+        engine.run(_tp_sl_spec(), df, initial_equity=Decimal("10000"))
+
+
 def test_run_raises_on_missing_columns() -> None:
     engine = BacktestEngine()
-    bad = pd.DataFrame({"open": [1.0], "close": [1.0]})
+    bad = pd.DataFrame({"open": [1.0, 1.0], "close": [1.0, 1.0]})
     with pytest.raises(ValidationError, match="columns"):
         engine.run(_tp_sl_spec(), bad, initial_equity=Decimal("10000"))
 

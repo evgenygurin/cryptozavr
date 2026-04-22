@@ -36,6 +36,7 @@ from cryptozavr.domain.exceptions import ValidationError
 from cryptozavr.domain.value_objects import TimeRange
 
 _REQUIRED_COLUMNS = {"open", "high", "low", "close", "volume"}
+_MIN_CANDLES = 2
 
 
 class BacktestEngine:
@@ -94,6 +95,10 @@ class BacktestEngine:
     def _validate(candles: pd.DataFrame) -> None:
         if len(candles) == 0:
             raise ValidationError("BacktestEngine: candles DataFrame is empty")
+        if len(candles) < _MIN_CANDLES:
+            raise ValidationError(
+                "BacktestEngine: at least 2 candles required (single-bar backtest is meaningless)"
+            )
         missing = _REQUIRED_COLUMNS - set(candles.columns)
         if missing:
             raise ValidationError(
