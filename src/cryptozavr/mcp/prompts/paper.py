@@ -56,8 +56,10 @@ def register_paper_prompts(mcp: FastMCP) -> None:
             f"4. RR >= 1 always; prefer >= 1.5.\n"
             f"5. After 3 losses in a row — pause at least 10 minutes.\n"
             f"6. NEVER trade against a clear trend (check analyze_snapshot).\n"
-            f"7. Use paper_open_trade. Monitor with wait_for_event on the "
-            f"returned watch_id. Never bypass stops.\n"
+            f"7. paper_open_trade ОТКРЫВАЕТ позицию МГНОВЕННО по указанной "
+            f"entry — это НЕ limit-ордер. Хочешь retest — сам дёрни ticker "
+            f"и реши когда звать тул. Monitor with wait_for_event(timeout_sec=30) "
+            f"на watch_id. Never bypass stops.\n"
             f"8. At session end, call the paper_review prompt."
         )
         user = (

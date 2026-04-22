@@ -39,11 +39,17 @@ def register_paper_tools(mcp: FastMCP, *, bankroll_initial: Decimal) -> None:
     @mcp.tool(
         name="paper_open_trade",
         description=(
-            "Open a paper trade. Persists to Supabase, starts a position watch "
-            "automatically, returns the trade with assigned watch_id. A "
-            "terminal event on the watch (stop_hit / take_hit / timeout) "
-            "closes the trade atomically. Use check_watch / wait_for_event "
-            "with the returned watch_id for live monitoring."
+            "Open a paper trade IMMEDIATELY at the given `entry` price. "
+            "This is NOT a pending / limit order — `entry` is the virtual "
+            "fill price used for P&L and level tracking; the position "
+            "opens the moment this tool returns, regardless of the current "
+            "market price. If you want to 'wait for retest', fetch the "
+            "ticker first and decide for yourself when to call this tool.\n"
+            "\n"
+            "Persists to Supabase, starts a position watch automatically, "
+            "returns the trade with watch_id. Terminal events on the watch "
+            "(stop_hit / take_hit / timeout) auto-close the trade. "
+            "Monitor via check_watch / wait_for_event with watch_id."
         ),
         tags={"paper", "position", "write"},
         annotations={
