@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-04-22
+
+### Added — M3.3 Analytics MCP tools
+
+Wraps M3.1's MarketAnalyzer strategies as MCP tools so Claude/Codex/etc. can pull computed market views, not just raw data.
+
+**Services (L4)**
+- `AnalyticsService` — thin orchestrator that chains `OhlcvService.fetch_ohlcv()` into `MarketAnalyzer.analyze()`. Returns `(AnalysisReport, reason_codes)` so the OHLCV audit trail propagates all the way to the MCP response.
+
+**DTOs**
+- `AnalysisResultDTO` — wire format for a single `AnalysisResult` (strategy / confidence / findings / reason_codes). `_json_friendly` helper recursively converts tuples → lists so Decimal-in-tuple findings (S/R levels) serialise cleanly via `model_dump(mode="json")`.
+- `AnalysisReportDTO` — composite report (venue / symbol / timeframe / results list / reason_codes).
+
+**MCP surface**
+- Tool: `compute_vwap(venue, symbol, timeframe, limit=200, force_refresh=False)` → `AnalysisResultDTO`. `timeout=30s`, `meta={strategy: vwap, version}`.
+- Tool: `identify_support_resistance(...)` → `AnalysisResultDTO`. Swing-based pivots + clustering.
+- Tool: `volatility_regime(...)` → `AnalysisResultDTO`. ATR classifier (calm/normal/high/extreme).
+- Tool: `analyze_snapshot(...)` → `AnalysisReportDTO`. Composite: one OHLCV fetch, 3 strategies, emits `ctx.report_progress(step, total, msg)` for each strategy. `timeout=60s`.
+- All tools: idiomatic v3 — `Depends(get_analytics_service)`, module-level singleton, `ctx.info/warning` for reason_codes + staleness, `ToolError` via `domain_to_tool_error`.
+
+**Slash commands**
+- `/cryptozavr:analyze <venue> <symbol> [timeframe] [limit]` — drives the composite `analyze_snapshot` tool and renders a fair-value / levels / volatility / provenance layout.
+- `/cryptozavr:health` banner updated to list all 10 tools.
+
+**Plugin surface now**
+- **Tools (10)**: echo, get_ticker, get_ohlcv, get_order_book, get_trades, resolve_symbol, **compute_vwap**, **identify_support_resistance**, **volatility_regime**, **analyze_snapshot**
+- **Prompts (2)**: research_symbol, risk_check
+- **Resources (4)**: cryptozavr://venues, ://symbols/{venue}, ://trending, ://categories
+- **Slash commands (7)**: health, ticker, ohlcv, research, resolve, trending, **analyze**
+
+### Tests
+- +20 unit tests (DTOs, AnalyticsService, 4 analytics tools, wire smoke test)
+- Unit total: 349 (was 332 after M3.2)
+
+### Docs
+- `CLAUDE.md`: new "Editing workflow — import placement" section — pre-commit/formatter strips unreferenced imports between Edits; document the safe ordering (import with usage, never ahead).
+
+### Commits
+- `feat(mcp): add AnalysisResultDTO + AnalysisReportDTO` (54f617f)
+- `feat(application): add AnalyticsService L4 orchestrator` (ac78319)
+- `feat(mcp): add 3 single-strategy analytics tools` (0dc4d04)
+- `feat(mcp): add analyze_snapshot composite analytics tool` (c239d79)
+- `feat(mcp): wire analytics stack into bootstrap + server` (c57df34)
+- `docs(claude): add import-placement rule for formatter safety` (452cbd9)
+
 ## [0.1.3] - 2026-04-22
 
 ### Added — M3.2 Discovery surface
