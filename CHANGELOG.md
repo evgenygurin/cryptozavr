@@ -7,52 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — Phase 2B.2 — Condition evaluator
-
-- `cryptozavr.application.backtest.evaluator` package:
-  - `IndicatorCache` — interns `IndicatorRef` → `Indicator` so entry +
-    exit sharing a reference compute once; snapshots current → previous
-    on each `tick()` for crossing ops.
-  - `evaluate_condition(Condition, cache) -> bool | None` — all 6
-    `ComparatorOp`s (GT/GTE/LT/LTE/CROSSES_ABOVE/CROSSES_BELOW) with
-    None-propagation while indicators warm up.
-  - `StrategyEvaluator` — ties a `StrategySpec` to a streaming
-    `IndicatorCache`, emits `SignalTick(bar_index, entry, exit)` per
-    candle. Entry is AND-folded; exit is OR-folded; None propagates so
-    the trade simulator (2B.3) can distinguish "no signal yet" from
-    "signal is false".
-  - Exit with zero conditions + TP/SL-only emits `exit_signal=False`
-    explicitly (not None once entry is warm) so 2B.3 knows it can still
-    act on TP/SL.
-- 28 new unit tests: all comparator ops × true/false/warm-up, crossing
-  semantics, same-ref interning, AND/OR-fold edge cases, bar-index
-  monotonicity, spec immutability.
-- No trade simulation or TP/SL handling — 2B.3's concern since only
-  2B.3 knows the entry price.
-
-### Added — Phase 2B.1 — Streaming indicator engine
-
-- `cryptozavr.application.backtest.indicators` package with an `Indicator`
-  Protocol (`update(candle) -> Decimal | None`, `is_warm`, `period`) and
-  6 concrete implementations: `SimpleMovingAverage`,
-  `ExponentialMovingAverage`, `RelativeStrengthIndex`, `MACD` (line only),
-  `AverageTrueRange`, `VolumeIndicator`.
-- `create_indicator(IndicatorRef) -> Indicator` factory maps 2A's DSL
-  references to concrete streaming instances — fresh independent state
-  per call.
-- `extract_price(candle, PriceSource)` helper — HLC3 uses exact Decimal
-  division (no float drift).
-- Algorithmic choices: SMA uses O(1) rolling-sum subtraction; EMA seeds
-  with SMA of first `period` bars then applies classic alpha smoothing;
-  RSI and ATR use Wilder smoothing; RSI returns 100 when `avg_loss == 0`
-  (max-bullish convention). MACD signal/histogram deferred — exposing
-  them would need a 2A+1 DSL extension.
-- 48 new unit tests: warm-up semantics, hand-computed references,
-  property-based sliding-window match for SMA, ground-truth RSI.
-- No `BacktestReport` / MCP / persistence surface at this layer — pure
-  streaming math consumed by 2B.2 (condition evaluator) + 2B.3 (trade
-  simulator) in subsequent sub-phases.
-
 ### Added — Phase 2A — Declarative strategy DSL + Builder
 
 - `cryptozavr.application.strategy` package with 4 frozen Pydantic DTOs
