@@ -74,7 +74,7 @@ Three units + closure. Each unit = one subagent dispatch + one light review (IRO
 
 **Budget:** 1 subagent + 1 light review.
 
-- [x] Unit 3-3 done
+- [x] Unit 3-3 done (f40b89a, light review APPROVED)
 
 ## Phase 3 closure — heavy review + PR + merge
 
