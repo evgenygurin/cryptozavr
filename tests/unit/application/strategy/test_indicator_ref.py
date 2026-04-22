@@ -19,10 +19,19 @@ def test_explicit_source_overrides_default() -> None:
     assert ref.source is PriceSource.HLC3
 
 
-@pytest.mark.parametrize("period", [0, -1, 501])
-def test_period_out_of_range_raises(period: int) -> None:
+@pytest.mark.parametrize("period", [0, -1])
+def test_period_must_be_positive(period: int) -> None:
+    """Only `period > 0` is enforced — no upper bound because long-lookback
+    indicators (200-day SMA, 365-day MA) are legitimate."""
     with pytest.raises(ValidationError):
         IndicatorRef(kind=IndicatorKind.RSI, period=period)
+
+
+def test_large_period_accepted() -> None:
+    """Confirms there's no arbitrary upper bound on period (regression test
+    for an earlier `le=500` cap that blocked macro-scale indicators)."""
+    ref = IndicatorRef(kind=IndicatorKind.SMA, period=1000)
+    assert ref.period == 1000
 
 
 def test_frozen_cannot_mutate() -> None:

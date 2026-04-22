@@ -38,9 +38,12 @@ def test_empty_conditions_rejected() -> None:
         StrategyEntry(side=StrategySide.LONG, conditions=())
 
 
-def test_more_than_eight_conditions_rejected() -> None:
-    with pytest.raises(ValidationError):
-        StrategyEntry(
-            side=StrategySide.LONG,
-            conditions=tuple(_c() for _ in range(9)),
-        )
+def test_many_conditions_accepted() -> None:
+    """Regression test for an earlier `max_length=8` cap — strategies may
+    legitimately AND many filters (regime + volume + trend + momentum +
+    volatility + session-time + ...); only `min_length=1` is enforced."""
+    entry = StrategyEntry(
+        side=StrategySide.LONG,
+        conditions=tuple(_c() for _ in range(12)),
+    )
+    assert len(entry.conditions) == 12
