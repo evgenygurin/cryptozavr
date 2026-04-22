@@ -92,7 +92,7 @@ brainstorming — scope уже зафиксирован в MVP spec §11.3.
 
 **Dispatch:** 1 subagent (большой unit, но coherent scope) + 1 light review.
 
-- [ ] Unit 2D-3 done
+- [x] Unit 2D-3 done (f04f08b, light review APPROVED; visitor ClassVar pre-existing — spawned separate task)
 
 ### Unit 2E-1: pgvector schema + service layer
 
