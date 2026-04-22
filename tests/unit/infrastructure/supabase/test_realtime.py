@@ -9,6 +9,7 @@ import pytest
 from cryptozavr.infrastructure.supabase.realtime import (
     RealtimeSubscriber,
     SubscriptionHandle,
+    TickerSubscription,
 )
 
 
@@ -113,3 +114,59 @@ class TestRealtimeSubscriber:
                 venue_id="kucoin",
                 callback=lambda _: None,
             )
+
+    @pytest.mark.asyncio
+    async def test_subscribe_ticker_tracks_pair_in_subscriptions(
+        self,
+        async_supabase_client,
+    ) -> None:
+        client, _ = async_supabase_client
+        subscriber = RealtimeSubscriber(client=client)
+        handle = await subscriber.subscribe_ticker(
+            venue_id="kucoin",
+            symbol="BTC/USDT",
+            callback=lambda _: None,
+        )
+        assert isinstance(handle, SubscriptionHandle)
+        subs = subscriber.subscriptions()
+        assert subs == [
+            TickerSubscription(
+                venue_id="kucoin",
+                symbol="BTC/USDT",
+                channel_id=handle.channel_id,
+            )
+        ]
+
+    @pytest.mark.asyncio
+    async def test_legacy_subscribe_tickers_does_not_populate_subscriptions(
+        self,
+        async_supabase_client,
+    ) -> None:
+        client, _ = async_supabase_client
+        subscriber = RealtimeSubscriber(client=client)
+        await subscriber.subscribe_tickers(
+            venue_id="kucoin",
+            callback=lambda _: None,
+        )
+        assert subscriber.subscriptions() == []
+
+    @pytest.mark.asyncio
+    async def test_close_clears_subscriptions(
+        self,
+        async_supabase_client,
+    ) -> None:
+        client, _ = async_supabase_client
+        subscriber = RealtimeSubscriber(client=client)
+        await subscriber.subscribe_ticker(
+            venue_id="kucoin",
+            symbol="BTC/USDT",
+            callback=lambda _: None,
+        )
+        await subscriber.subscribe_ticker(
+            venue_id="coingecko",
+            symbol="ETH",
+            callback=lambda _: None,
+        )
+        assert len(subscriber.subscriptions()) == 2
+        await subscriber.close()
+        assert subscriber.subscriptions() == []
