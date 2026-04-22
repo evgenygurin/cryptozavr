@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — Phase 1.5 follow-up
+
+- **`get_trades` now works end-to-end**: `CCXTProvider` overrides
+  `_fetch_trades_raw` / `_normalize_trades` on top of a new
+  `CCXTAdapter.trades_to_domain`. Previously fell through to
+  `BaseProvider`'s `NotImplementedError("trades not implemented for
+  this provider")`.
+- **KuCoin order-book depth normalisation**: `CCXTProvider._snap_order_book_depth`
+  collapses any requested depth to `{20, 100}` (the only values CCXT
+  accepts for `kucoin.fetchOrderBook`). Previously a live call with
+  `depth=5` or `depth=50` failed with
+  `kucoin fetchOrderBook() limit argument must be 20 or 100`.
+- **Version drift resolved**: `pyproject.toml`, `src/cryptozavr/__init__.py`,
+  `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` all bumped
+  to `0.3.0` to match the git tag and CHANGELOG. Tests now read
+  `cryptozavr.__version__` instead of hard-coding the literal.
+
+### Tests
+- +12 unit tests: `trades_to_domain` (4), provider trades happy-path +
+  unknown-side (2), order-book depth snap parametrised over 6 inputs.
+- Unit + contract total: **435 passing** (was 423).
+
 ## [0.3.0] - 2026-04-22 — **Phase 1.5: Realtime + Observability**
 
 Ships the observability substrate and realtime-driven cache invalidation that
