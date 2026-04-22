@@ -184,6 +184,57 @@ class TestOHLCVPaginator:
         service.fetch_ohlcv.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_clips_candles_outside_window(self) -> None:
+        """Provider may return candles beyond until_ms — paginator trims them."""
+        since_ms = _START
+        until_ms = _START + _TF_MS * 5  # 5-candle window
+        # Provider returns 8 candles; last 3 are past until_ms.
+        candles = tuple(_candle(_START + i * _TF_MS) for i in range(8))
+        service = MagicMock(spec=OhlcvService)
+        service.fetch_ohlcv = AsyncMock(return_value=_result(candles, ["cache:miss"]))
+        paginator = OHLCVPaginator(
+            service=service,
+            venue="kucoin",
+            symbol="BTC-USDT",
+            timeframe=Timeframe.H1,
+            since_ms=since_ms,
+            until_ms=until_ms,
+            chunk_size=10,
+        )
+
+        chunks = [chunk async for chunk in paginator]
+
+        assert len(chunks) == 1
+        clipped = chunks[0].series.candles
+        assert len(clipped) == 5
+        assert all(since_ms <= c.opened_at.to_ms() < until_ms for c in clipped)
+        assert "paginator:clipped_to_window" in chunks[0].reason_codes
+
+    @pytest.mark.asyncio
+    async def test_candles_before_since_are_dropped(self) -> None:
+        """Provider may ignore `since` and return older history — paginator drops it."""
+        since_ms = _START + _TF_MS * 5
+        until_ms = _START + _TF_MS * 10
+        # Provider returns 10 candles starting from _START (before `since`).
+        candles = tuple(_candle(_START + i * _TF_MS) for i in range(10))
+        service = MagicMock(spec=OhlcvService)
+        service.fetch_ohlcv = AsyncMock(return_value=_result(candles, ["cache:miss"]))
+        paginator = OHLCVPaginator(
+            service=service,
+            venue="kucoin",
+            symbol="BTC-USDT",
+            timeframe=Timeframe.H1,
+            since_ms=since_ms,
+            until_ms=until_ms,
+            chunk_size=10,
+        )
+
+        chunks = [chunk async for chunk in paginator]
+
+        kept = [c for chunk in chunks for c in chunk.series.candles]
+        assert all(since_ms <= c.opened_at.to_ms() < until_ms for c in kept)
+
+    @pytest.mark.asyncio
     async def test_stuck_provider_does_not_loop_forever(self) -> None:
         # Provider keeps returning the same single candle (opened_at = _START).
         # First fetch yields, then cursor advances to _START + tf_ms. Second

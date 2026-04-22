@@ -118,3 +118,23 @@ class TestSupportResistanceStrategy:
         assert result.confidence is Confidence.LOW
         assert result.findings["supports"] == ()
         assert result.findings["resistances"] == ()
+        assert result.findings["pivots_found"] == 0
+
+    def test_findings_contain_pivots_found(self) -> None:
+        series = _make_series(
+            (
+                _c(0, "110", "100"),
+                _c(60_000, "105", "95"),
+                _c(120_000, "100", "90"),  # pivot low
+                _c(180_000, "108", "98"),
+                _c(240_000, "115", "105"),
+                _c(300_000, "120", "110"),  # pivot high
+                _c(360_000, "118", "108"),
+                _c(420_000, "112", "102"),
+            )
+        )
+        result = SupportResistanceStrategy(window=2).analyze(series)
+        assert "pivots_found" in result.findings
+        pivots_found = result.findings["pivots_found"]
+        assert isinstance(pivots_found, int)
+        assert pivots_found >= 2  # at least the obvious high + low
