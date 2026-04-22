@@ -109,7 +109,7 @@ brainstorming — scope уже зафиксирован в MVP spec §11.3.
 
 **Dispatch:** 1 subagent + 1 light review. Embedding provider choice TBD с user если нетривиально (если static — можно локальный placeholder).
 
-- [ ] Unit 2E-1 done
+- [x] Unit 2E-1 done (c9bac19 + comment fix, light review APPROVED; heavy review must run supabase-up smoke)
 
 ### Unit skill-1: `strategy-review` skill
 
