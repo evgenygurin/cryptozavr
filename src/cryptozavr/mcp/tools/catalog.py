@@ -17,7 +17,7 @@ from pydantic import Field
 
 from cryptozavr.application.services.discovery_service import DiscoveryService
 from cryptozavr.domain.symbols import SymbolRegistry
-from cryptozavr.domain.venues import VenueId, VenueStateKind
+from cryptozavr.domain.venues import MarketType, VenueId, VenueStateKind
 from cryptozavr.infrastructure.providers.state.venue_state import VenueState
 from cryptozavr.mcp.dtos import (
     CategoriesListDTO,
@@ -32,6 +32,7 @@ from cryptozavr.mcp.dtos import (
 )
 from cryptozavr.mcp.lifespan_state import (
     get_discovery_service,
+    get_providers,
     get_registry,
     get_venue_states,
 )
@@ -39,6 +40,7 @@ from cryptozavr.mcp.lifespan_state import (
 _REGISTRY: SymbolRegistry = Depends(get_registry)
 _DISCOVERY: DiscoveryService = Depends(get_discovery_service)
 _VENUE_STATES: dict[VenueId, VenueState] = Depends(get_venue_states)
+_PROVIDERS: dict[VenueId, object] = Depends(get_providers)
 
 
 def _venue_state_label(state: VenueState) -> str:
@@ -65,7 +67,13 @@ def register_catalog_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="list_symbols",
-        description="List registered symbols for a venue.",
+        description=(
+            "Live catalogue of spot symbols on a venue. For `kucoin` this "
+            "queries ccxt markets and returns every active spot/USDT pair "
+            "(~1000 tokens). For `coingecko` returns what the plugin has "
+            "registered locally. No whitelist — any BASE-QUOTE also works "
+            "via auto-register in SymbolResolver."
+        ),
         tags={"catalog", "read-only"},
         annotations={"readOnlyHint": True, "idempotentHint": True},
     )
@@ -75,13 +83,47 @@ def register_catalog_tools(mcp: FastMCP) -> None:
             Field(description="Venue id. Supported: kucoin, coingecko."),
         ],
         ctx: Context,
+        quote: Annotated[
+            str,
+            Field(description="Quote currency filter for live fetch (default USDT)."),
+        ] = "USDT",
         registry: SymbolRegistry = _REGISTRY,
+        providers: dict[VenueId, object] = _PROVIDERS,
     ) -> SymbolsListDTO:
-        await ctx.info(f"list_symbols venue={venue}")
+        await ctx.info(f"list_symbols venue={venue} quote={quote}")
         try:
             venue_id = VenueId(venue)
         except ValueError:
             return SymbolsListDTO(venue=venue, symbols=[], error="unsupported")
+
+        provider = providers.get(venue_id)
+        live_fetch = getattr(provider, "list_spot_markets", None)
+        if live_fetch is not None:
+            try:
+                natives = await live_fetch(quote=quote)
+            except Exception as exc:
+                await ctx.warning(f"live markets fetch failed: {type(exc).__name__}")
+                natives = []
+            # Materialise into the Flyweight registry so subsequent
+            # resolves are O(1); also keeps DTO builder happy.
+            dtos: list[SymbolDTO] = []
+            for native in natives:
+                if "-" not in native:
+                    continue
+                base, _, quote_code = native.partition("-")
+                if not base or not quote_code:
+                    continue
+                sym = registry.get(
+                    venue_id,
+                    base,
+                    quote_code,
+                    market_type=MarketType.SPOT,
+                    native_symbol=native,
+                )
+                dtos.append(SymbolDTO.from_domain(sym))
+            return SymbolsListDTO(venue=venue, symbols=dtos)
+
+        # Fallback: just read the registry (non-ccxt venues like coingecko).
         symbols = registry.all_for_venue(venue_id)
         return SymbolsListDTO(
             venue=venue,

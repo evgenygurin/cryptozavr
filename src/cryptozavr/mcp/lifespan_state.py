@@ -78,6 +78,7 @@ class _LifespanKeys:
     paper_repo: str = "paper_repo"
     paper_ledger: str = "paper_ledger"
     paper_bankroll_override: str = "paper_bankroll_override"
+    providers: str = "providers"
 
 
 LIFESPAN_KEYS = _LifespanKeys()
@@ -169,6 +170,13 @@ def get_ws_provider(ctx: Any = _CTX) -> KucoinWsProvider:
     return cast(
         "KucoinWsProvider",
         ctx.lifespan_context[LIFESPAN_KEYS.ws_provider],
+    )
+
+
+def get_providers(ctx: Any = _CTX) -> dict[VenueId, Any]:
+    return cast(
+        "dict[VenueId, Any]",
+        ctx.lifespan_context[LIFESPAN_KEYS.providers],
     )
 
 

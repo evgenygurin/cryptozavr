@@ -84,6 +84,25 @@ class CCXTProvider(BaseProvider):
             await self._exchange.load_markets()
             self._markets_loaded = True
 
+    async def list_spot_markets(self, quote: str = "USDT") -> list[str]:
+        """Return every native_symbol (e.g. 'BTC-USDT') for spot/`quote` pairs.
+
+        Dynamically queries the exchange catalogue — no hardcoded whitelist.
+        """
+        await self._ensure_markets_loaded()
+        markets = getattr(self._exchange, "markets", None) or {}
+        out: list[str] = []
+        for ccxt_symbol, market in markets.items():
+            if not market.get("spot", False):
+                continue
+            if market.get("quote") != quote:
+                continue
+            if market.get("active") is False:
+                continue
+            # KuCoin ccxt symbol 'BTC/USDT' → native 'BTC-USDT'
+            out.append(str(ccxt_symbol).replace("/", "-"))
+        return sorted(out)
+
     async def _fetch_ticker_raw(self, symbol: Symbol) -> Any:
         return await self._exchange.fetch_ticker(symbol.native_symbol)
 

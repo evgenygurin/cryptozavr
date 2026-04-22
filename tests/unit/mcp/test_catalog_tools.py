@@ -31,6 +31,7 @@ def _build_server(
         LIFESPAN_KEYS.registry: registry or SymbolRegistry(),
         LIFESPAN_KEYS.discovery_service: discovery or MagicMock(spec=DiscoveryService),
         LIFESPAN_KEYS.venue_states: venue_states or {},
+        LIFESPAN_KEYS.providers: {},
     }
 
     @asynccontextmanager

@@ -38,7 +38,7 @@ from cryptozavr.application.strategies.support_resistance import (
 from cryptozavr.application.strategies.volatility import VolatilityRegimeStrategy
 from cryptozavr.application.strategies.vwap import VwapStrategy
 from cryptozavr.domain.symbols import SymbolRegistry
-from cryptozavr.domain.venues import MarketType, VenueId
+from cryptozavr.domain.venues import VenueId
 from cryptozavr.domain.watch import WatchState
 from cryptozavr.infrastructure.observability.metrics import MetricsRegistry
 from cryptozavr.infrastructure.persistence.paper_trade_repo import PaperTradeRepository
@@ -121,53 +121,9 @@ async def build_production_service(
     metrics_registry = MetricsRegistry()
 
     registry = SymbolRegistry()
-    # Pre-seed high-liquidity KuCoin USDT pairs so list_symbols has a useful
-    # default surface. SymbolResolver auto-registers any other BASE-QUOTE on
-    # first resolve, so this is just a convenience catalogue — not a whitelist.
-    for _base in (
-        "BTC",
-        "ETH",
-        "SOL",
-        "XRP",
-        "DOGE",
-        "ADA",
-        "AVAX",
-        "LINK",
-        "MATIC",
-        "LTC",
-        "DOT",
-        "BCH",
-        "TON",
-        "NEAR",
-        "ATOM",
-        "APT",
-        "SUI",
-        "ARB",
-        "OP",
-        "INJ",
-        "SEI",
-        "TIA",
-        "PEPE",
-        "SHIB",
-        "AAVE",
-        "UNI",
-        "ICP",
-        "FIL",
-        "ETC",
-        "XLM",
-        "HBAR",
-        "VET",
-        "ALGO",
-        "ZEC",
-        "KAS",
-    ):
-        registry.get(
-            VenueId.KUCOIN,
-            _base,
-            "USDT",
-            market_type=MarketType.SPOT,
-            native_symbol=f"{_base}-USDT",
-        )
+    # SymbolRegistry is a Flyweight cache only — NO whitelist.
+    # SymbolResolver auto-registers any BASE-QUOTE on first resolve;
+    # list_symbols fetches the live exchange catalogue via ccxt.
     venue_states = {
         VenueId.KUCOIN: VenueState(VenueId.KUCOIN),
         VenueId.COINGECKO: VenueState(VenueId.COINGECKO),
@@ -289,6 +245,7 @@ async def build_production_service(
         LIFESPAN_KEYS.risk_engine: risk_engine,
         LIFESPAN_KEYS.kill_switch: kill_switch,
         LIFESPAN_KEYS.ws_provider: ws_provider,
+        LIFESPAN_KEYS.providers: providers,
         LIFESPAN_KEYS.position_watcher: position_watcher,
         LIFESPAN_KEYS.watch_registry: watch_registry,
         LIFESPAN_KEYS.paper_repo: paper_repo,
