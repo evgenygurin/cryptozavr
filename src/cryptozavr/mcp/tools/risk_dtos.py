@@ -69,6 +69,7 @@ class TradeIntentPayload(BaseModel):
     recent_losses: int = Field(default=0, ge=0)
     current_balance: Decimal | None = None
     current_exposure_pct: Decimal | None = None
+    today_pnl_pct: Decimal | None = Field(default=None, ge=-1, le=1)
 
     @model_validator(mode="after")
     def _venue_matches(self) -> TradeIntentPayload:
@@ -90,6 +91,7 @@ class TradeIntentPayload(BaseModel):
             recent_losses=self.recent_losses,
             current_balance=self.current_balance,
             current_exposure_pct=self.current_exposure_pct,
+            today_pnl_pct=self.today_pnl_pct,
         )
 
 

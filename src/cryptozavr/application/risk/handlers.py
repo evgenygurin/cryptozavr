@@ -105,6 +105,36 @@ class LiquidityHandler:
         return None
 
 
+class DailyLossHandler:
+    name: ClassVar[str] = "DailyLoss"
+
+    def evaluate(
+        self,
+        intent: TradeIntent,
+        policy: RiskPolicy,
+        kill_switch: KillSwitch,
+    ) -> Violation | None:
+        if intent.today_pnl_pct is None:
+            # No PnL data yet (e.g. first bar of a backtest); handled by Exposure
+            # convention: skip silently instead of flagging "no data" as breach.
+            return None
+        limit = policy.max_daily_loss_pct
+        threshold = -limit.value
+        if intent.today_pnl_pct <= threshold:
+            return Violation(
+                handler_name=self.name,
+                policy_field="max_daily_loss_pct",
+                severity=limit.severity,
+                message=(
+                    f"today_pnl_pct {intent.today_pnl_pct} breached "
+                    f"max_daily_loss_pct {limit.value} (threshold {threshold})"
+                ),
+                observed=intent.today_pnl_pct,
+                limit=threshold,
+            )
+        return None
+
+
 class CooldownHandler:
     name: ClassVar[str] = "Cooldown"
 

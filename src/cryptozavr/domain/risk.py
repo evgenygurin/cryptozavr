@@ -40,6 +40,7 @@ class TradeIntent:
     recent_losses: int = 0
     current_balance: Decimal | None = None
     current_exposure_pct: Decimal | None = None
+    today_pnl_pct: Decimal | None = None
 
     def __post_init__(self) -> None:
         if self.size <= 0:
@@ -55,6 +56,12 @@ class TradeIntent:
         ):
             raise ValidationError(
                 "TradeIntent.current_exposure_pct must be in [0, 1] when set",
+            )
+        if self.today_pnl_pct is not None and (
+            self.today_pnl_pct < Decimal(-1) or self.today_pnl_pct > Decimal(1)
+        ):
+            raise ValidationError(
+                "TradeIntent.today_pnl_pct must be in [-1, 1] when set",
             )
 
 

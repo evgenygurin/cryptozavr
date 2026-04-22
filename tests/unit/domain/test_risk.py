@@ -52,6 +52,7 @@ class TestTradeIntent:
         assert intent.recent_losses == 0
         assert intent.current_balance is None
         assert intent.current_exposure_pct is None
+        assert intent.today_pnl_pct is None
 
     @pytest.mark.parametrize("bad_size", [Decimal("0"), Decimal("-1")])
     def test_size_non_positive_rejected(self, bad_size: Decimal) -> None:
@@ -81,6 +82,33 @@ class TestTradeIntent:
         # Boundaries are inclusive.
         _sample_intent(current_exposure_pct=Decimal("0"))
         _sample_intent(current_exposure_pct=Decimal("1"))
+
+    def test_today_pnl_pct_none_allowed(self) -> None:
+        """None marks 'no PnL data yet' — DailyLossHandler will skip."""
+        intent = _sample_intent(today_pnl_pct=None)
+        assert intent.today_pnl_pct is None
+
+    @pytest.mark.parametrize(
+        "valid_value",
+        [
+            Decimal("-1"),
+            Decimal("-0.5"),
+            Decimal("0"),
+            Decimal("0.5"),
+            Decimal("1"),
+        ],
+    )
+    def test_today_pnl_pct_boundaries_and_inner_values_allowed(
+        self,
+        valid_value: Decimal,
+    ) -> None:
+        intent = _sample_intent(today_pnl_pct=valid_value)
+        assert intent.today_pnl_pct == valid_value
+
+    @pytest.mark.parametrize("bad", [Decimal("-1.01"), Decimal("1.01")])
+    def test_today_pnl_pct_out_of_range_rejected(self, bad: Decimal) -> None:
+        with pytest.raises(ValidationError, match=r"today_pnl_pct"):
+            _sample_intent(today_pnl_pct=bad)
 
 
 class TestViolation:
