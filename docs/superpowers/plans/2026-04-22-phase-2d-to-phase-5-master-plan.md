@@ -65,7 +65,7 @@ brainstorming — scope уже зафиксирован в MVP spec §11.3.
 
 **Dispatch:** 1 subagent + 1 light review.
 
-- [ ] Unit 2D-1 done
+- [x] Unit 2D-1 done (ca02223, light review APPROVED)
 
 ### Unit 2D-2: Read-only tools (list / explain / diff)
 
@@ -78,7 +78,7 @@ brainstorming — scope уже зафиксирован в MVP spec §11.3.
 
 **Dispatch:** 1 subagent + 1 light review.
 
-- [ ] Unit 2D-2 done
+- [x] Unit 2D-2 done (887f3af, light review APPROVED)
 
 ### Unit 2D-3: Compute tools (backtest / compare / stress_test / save)
 
@@ -92,7 +92,7 @@ brainstorming — scope уже зафиксирован в MVP spec §11.3.
 
 **Dispatch:** 1 subagent (большой unit, но coherent scope) + 1 light review.
 
-- [ ] Unit 2D-3 done
+- [x] Unit 2D-3 done (f04f08b, light review APPROVED; visitor ClassVar pre-existing — spawned separate task)
 
 ### Unit 2E-1: pgvector schema + service layer
 
@@ -109,7 +109,7 @@ brainstorming — scope уже зафиксирован в MVP spec §11.3.
 
 **Dispatch:** 1 subagent + 1 light review. Embedding provider choice TBD с user если нетривиально (если static — можно локальный placeholder).
 
-- [ ] Unit 2E-1 done
+- [x] Unit 2E-1 done (c9bac19 + comment fix, light review APPROVED; heavy review must run supabase-up smoke)
 
 ### Unit skill-1: `strategy-review` skill
 
@@ -120,7 +120,7 @@ brainstorming — scope уже зафиксирован в MVP spec §11.3.
 
 **Dispatch:** 1 subagent (small) + no review (markdown).
 
-- [ ] Unit skill-1 done
+- [x] Unit skill-1 done (direct write, skill at skills/strategy-review/SKILL.md)
 
 ### Phase 2 closure — heavy review + PR + user merge
 
