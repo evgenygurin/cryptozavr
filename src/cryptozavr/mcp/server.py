@@ -31,6 +31,7 @@ from cryptozavr.mcp.tools.ohlcv import register_ohlcv_tool
 from cryptozavr.mcp.tools.order_book import register_order_book_tool
 from cryptozavr.mcp.tools.ticker import register_ticker_tool
 from cryptozavr.mcp.tools.trades import register_trades_tool
+from cryptozavr.mcp.tools.validate_strategy import register_validate_strategy_tool
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ def build_server(settings: Settings) -> FastMCP:
     register_analytics_tools(mcp)
     register_fetch_ohlcv_history_tool(mcp)
     register_catalog_tools(mcp)
+    register_validate_strategy_tool(mcp)
     register_prompts(mcp)
     register_resources(mcp)
     register_venue_health_resource(mcp)
