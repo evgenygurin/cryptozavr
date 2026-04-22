@@ -78,6 +78,19 @@ class WatchState:
     events: list[WatchEvent] = field(default_factory=list)
     _fired_non_terminal: set[EventType] = field(default_factory=set)
     _task: asyncio.Task[None] | None = None
+    _change_cond: asyncio.Condition | None = None
+
+    def ensure_cond(self) -> asyncio.Condition:
+        """Lazy-init the change condition. Must be called inside an event loop."""
+        if self._change_cond is None:
+            self._change_cond = asyncio.Condition()
+        return self._change_cond
+
+    async def notify_change(self) -> None:
+        """Wake up every waiter blocked on the change condition."""
+        cond = self.ensure_cond()
+        async with cond:
+            cond.notify_all()
 
     def __post_init__(self) -> None:
         if self.entry <= 0 or self.stop <= 0 or self.take <= 0:

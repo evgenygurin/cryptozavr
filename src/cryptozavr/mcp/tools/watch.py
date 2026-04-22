@@ -1,7 +1,9 @@
-"""MCP tools for position watching: watch_position / check_watch / stop_watch."""
+"""MCP tools for position watching: watch_position / check_watch / stop_watch / wait_for_event."""
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from decimal import Decimal
 from typing import Annotated
 
@@ -12,7 +14,7 @@ from pydantic import Field
 from cryptozavr.application.services.position_watcher import PositionWatcher
 from cryptozavr.application.services.symbol_resolver import SymbolResolver
 from cryptozavr.domain.exceptions import DomainError
-from cryptozavr.domain.watch import WatchSide
+from cryptozavr.domain.watch import WatchSide, WatchStatus
 from cryptozavr.mcp.dtos import WatchIdDTO, WatchStateDTO
 from cryptozavr.mcp.errors import domain_to_tool_error
 from cryptozavr.mcp.lifespan_state import (
@@ -25,7 +27,7 @@ _WATCHER: PositionWatcher = Depends(get_position_watcher)
 
 
 def register_watch_tools(mcp: FastMCP) -> None:
-    """Attach watch_position / check_watch / stop_watch tools."""
+    """Attach watch_position / check_watch / stop_watch / wait_for_event tools."""
 
     @mcp.tool(
         name="watch_position",
@@ -33,7 +35,8 @@ def register_watch_tools(mcp: FastMCP) -> None:
             "Start a background position watch. Returns watch_id immediately. "
             "Polls real-time ticker via WebSocket and emits fire-once events "
             "(price_approaches_stop/take, breakeven_reached) plus terminal "
-            "events (stop_hit/take_hit/timeout). Poll via check_watch."
+            "events (stop_hit/take_hit/timeout). Poll via check_watch or "
+            "long-poll via wait_for_event."
         ),
         tags={"market", "position", "streaming"},
         annotations={
@@ -128,3 +131,63 @@ def register_watch_tools(mcp: FastMCP) -> None:
         except DomainError as exc:
             raise domain_to_tool_error(exc) from exc
         return WatchStateDTO.from_domain(state)
+
+    @mcp.tool(
+        name="wait_for_event",
+        description=(
+            "Block until a new event appears on the watch, the watch "
+            "terminates, or the timeout expires — then return the "
+            "accumulated snapshot with events[since_event_index:]. "
+            "Long-poll pattern: reaction < 100ms to real events, zero "
+            "busy-polling. Use instead of check_watch + sleep."
+        ),
+        tags={"market", "position", "streaming", "long-poll"},
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": False,
+        },
+    )
+    async def wait_for_event(
+        watch_id: Annotated[str, Field(description="The watch id to wait on.")],
+        ctx: Context,
+        since_event_index: Annotated[
+            int,
+            Field(
+                ge=0,
+                description=(
+                    "Return events starting from this index. Pass the "
+                    "next_event_index from the previous response to avoid "
+                    "re-seeing earlier events."
+                ),
+            ),
+        ] = 0,
+        timeout_sec: Annotated[
+            int,
+            Field(
+                ge=1,
+                le=600,
+                description="Max seconds to block before returning (default 300).",
+            ),
+        ] = 300,
+        watcher: PositionWatcher = _WATCHER,
+    ) -> WatchStateDTO:
+        await ctx.info(
+            f"wait_for_event {watch_id} since={since_event_index} timeout={timeout_sec}s"
+        )
+        try:
+            state = watcher.check(watch_id)
+        except DomainError as exc:
+            raise domain_to_tool_error(exc) from exc
+
+        cond = state.ensure_cond()
+
+        def _ready() -> bool:
+            return len(state.events) > since_event_index or state.status is not WatchStatus.RUNNING
+
+        if not _ready():
+            with contextlib.suppress(asyncio.TimeoutError):
+                async with cond:
+                    await asyncio.wait_for(cond.wait_for(_ready), timeout=timeout_sec)
+
+        return WatchStateDTO.from_domain(state, since_event_index=since_event_index)

@@ -132,6 +132,7 @@ class PositionWatcher:
             started_at_ms=int(time.time() * 1000),
             max_duration_sec=max_duration_sec,
         )
+        state.ensure_cond()  # init change condition in event loop
         self._registry[watch_id] = state
         state._task = asyncio.create_task(self._run(state), name=f"watch-{watch_id}")
         return watch_id
@@ -151,6 +152,7 @@ class PositionWatcher:
                 await task
         if state.status is WatchStatus.RUNNING:
             state.status = WatchStatus.CANCELLED
+        await state.notify_change()
         return state
 
     async def _run(self, state: WatchState) -> None:
@@ -165,15 +167,20 @@ class PositionWatcher:
                     state.append_event(event)
                     if event.type.is_terminal:
                         state.status = WatchStatus(event.type.value)
+                        await state.notify_change()
                         return
                     state._fired_non_terminal.add(event.type)
+                if events:
+                    await state.notify_change()
         except asyncio.CancelledError:
             if state.status is WatchStatus.RUNNING:
                 state.status = WatchStatus.CANCELLED
+            await state.notify_change()
             raise
         except Exception as exc:
             _LOG.exception("watch loop failed: %s", exc)
             state.status = WatchStatus.ERROR
+            await state.notify_change()
 
 
 def _update_pnl(state: WatchState, price: Decimal) -> None:
