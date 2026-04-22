@@ -89,7 +89,7 @@ claude plugin update cryptozavr@cryptozavr-marketplace   # tag → cache
 ```bash
 cd ~/.claude/plugins/cache/cryptozavr-marketplace/cryptozavr
 mv <stale> <stale>.backup && ln -s <new> <stale>     # symlink на новую
-pkill -f "cryptozavr-marketplace/cryptozavr/.*server\.py"   # Claude respawn'ит
+pkill -f "python.*-m cryptozavr\.mcp\.server"   # Claude respawn'ит
 ```
 
 **Live-sync code edits** (без bump версии): `cp <edited-file> ~/.claude/plugins/cache/cryptozavr-marketplace/cryptozavr/<current>/<same-path>` затем `pkill` subprocess. Чище — выйти из сессии и заново `claude --plugin-dir /Users/laptop/dev/cryptozavr`.
