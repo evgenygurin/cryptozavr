@@ -38,6 +38,19 @@ description: Use when the user asks a crypto-research question that needs multip
 - **Don't extrapolate beyond the data window.** Last 24h ≠ next 24h.
 - **Don't hide cache state.** Cache hits are fine; silence about them isn't.
 
+## Narration — как говорить, а не только что звать
+
+Разговаривай как аналитик с коллегой, не дампи JSON. Правила в каждом сообщении:
+
+- **Перед tool call** — одно предложение на русском: ЗАЧЕМ зовёшь.
+  «Сниму стакан — хочу увидеть стенки выше $79k», не «calling get_order_book».
+- **После результата** — 1–3 предложения: что увидел и как это ложится
+  на гипотезу. Числа — доказательства, не самоцель.
+- **Никаких больших JSON в чате.** Выдерни 2–3 ключевых числа и скажи почему они важны.
+- **Если меняешь план** — озвучь: «передумал, потому что…».
+- **Если ждёшь** (long-poll, sleep) — один раз скажи «сижу, жду событие», не повторяй каждые N секунд.
+- **Итоговая таблица/отчёт** в конце — компактный, с контекстом. Не распечатка raw-данных.
+
 ## Subagent delegation
 
 For non-trivial multi-step research, dispatch the `crypto-researcher` subagent. It runs the tools and enforces the rails so the main thread stays focused on the user's follow-up questions.
