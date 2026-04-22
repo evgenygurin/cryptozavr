@@ -20,6 +20,7 @@ from cryptozavr.domain.value_objects import Timeframe
 from cryptozavr.domain.venues import MarketType, VenueId
 from cryptozavr.mcp.lifespan_state import LIFESPAN_KEYS
 from cryptozavr.mcp.tools.analytics import (
+    register_analyze_snapshot_tool,
     register_compute_vwap_tool,
     register_support_resistance_tool,
     register_volatility_regime_tool,
@@ -229,3 +230,114 @@ class TestVolatilityRegimeTool:
         assert payload["strategy"] == "volatility_regime"
         assert payload["findings"]["regime"] == "normal"
         assert payload["findings"]["atr_pct"] == "2.38"
+
+
+def _report_all_three() -> AnalysisReport:
+    return AnalysisReport(
+        symbol=_symbol(),
+        timeframe=Timeframe.M15,
+        results=(_result_vwap(), _result_sr(), _result_vol()),
+    )
+
+
+class TestAnalyzeSnapshotTool:
+    @pytest.mark.asyncio
+    async def test_returns_report_with_all_three_strategies(self) -> None:
+        service = MagicMock(spec=AnalyticsService)
+        service.analyze = AsyncMock(
+            return_value=(_report_all_three(), ["cache:miss", "staleness:fresh"]),
+        )
+        mcp = _build_server(service, register_analyze_snapshot_tool)
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "analyze_snapshot",
+                {
+                    "venue": "kucoin",
+                    "symbol": "BTC-USDT",
+                    "timeframe": "15m",
+                },
+            )
+        payload = result.structured_content
+        assert payload["venue"] == "kucoin"
+        assert payload["symbol"] == "BTC-USDT"
+        assert payload["timeframe"] == "15m"
+        assert [r["strategy"] for r in payload["results"]] == [
+            "vwap",
+            "support_resistance",
+            "volatility_regime",
+        ]
+        assert payload["reason_codes"] == ["cache:miss", "staleness:fresh"]
+
+    @pytest.mark.asyncio
+    async def test_calls_analyze_with_all_three_strategy_names(self) -> None:
+        service = MagicMock(spec=AnalyticsService)
+        service.analyze = AsyncMock(
+            return_value=(_report_all_three(), ["cache:miss"]),
+        )
+        mcp = _build_server(service, register_analyze_snapshot_tool)
+        async with Client(mcp) as client:
+            await client.call_tool(
+                "analyze_snapshot",
+                {
+                    "venue": "kucoin",
+                    "symbol": "BTC-USDT",
+                    "timeframe": "1h",
+                    "limit": 500,
+                    "force_refresh": True,
+                },
+            )
+        service.analyze.assert_awaited_once_with(
+            venue="kucoin",
+            symbol="BTC-USDT",
+            timeframe=Timeframe.H1,
+            limit=500,
+            force_refresh=True,
+            strategy_names=("vwap", "support_resistance", "volatility_regime"),
+        )
+
+    @pytest.mark.asyncio
+    async def test_reports_progress_between_strategies(self) -> None:
+        service = MagicMock(spec=AnalyticsService)
+        service.analyze = AsyncMock(
+            return_value=(_report_all_three(), ["cache:hit"]),
+        )
+        progress_events: list[tuple[float, float | None, str | None]] = []
+
+        async def handler(progress, total, message):
+            progress_events.append((progress, total, message))
+
+        mcp = _build_server(service, register_analyze_snapshot_tool)
+        async with Client(mcp, progress_handler=handler) as client:
+            await client.call_tool(
+                "analyze_snapshot",
+                {
+                    "venue": "kucoin",
+                    "symbol": "BTC-USDT",
+                    "timeframe": "15m",
+                },
+            )
+        assert len(progress_events) >= 4
+        assert progress_events[0][0] == 0
+        assert progress_events[-1][0] == progress_events[-1][1]
+        messages = [e[2] for e in progress_events if e[2]]
+        assert any("fetching" in m.lower() for m in messages)
+        assert any("complete" in m.lower() for m in messages)
+
+    @pytest.mark.asyncio
+    async def test_propagates_domain_error(self) -> None:
+        service = MagicMock(spec=AnalyticsService)
+        service.analyze = AsyncMock(
+            side_effect=SymbolNotFoundError(user_input="XRP-USDT", venue="kucoin"),
+        )
+        mcp = _build_server(service, register_analyze_snapshot_tool)
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc:
+                await client.call_tool(
+                    "analyze_snapshot",
+                    {
+                        "venue": "kucoin",
+                        "symbol": "XRP-USDT",
+                        "timeframe": "15m",
+                    },
+                )
+        assert "XRP-USDT" in str(exc.value)

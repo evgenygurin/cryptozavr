@@ -1,8 +1,8 @@
-"""Analytics MCP tools — single-strategy wrappers over AnalyticsService.
+"""Analytics MCP tools — single-strategy wrappers + composite snapshot.
 
-v3 idiomatic: Depends + ctx logging + direct DTO return. Each tool
-fetches OHLCV via the same 5-handler chain then runs exactly one
-AnalysisStrategy from the MarketAnalyzer registry.
+v3 idiomatic: Depends + ctx logging + direct DTO return. Single-strategy
+tools wrap one AnalysisStrategy; analyze_snapshot runs all three at once
+over the same OHLCV fetch and emits progress updates between steps.
 """
 
 from __future__ import annotations
@@ -17,9 +17,15 @@ from cryptozavr import __version__
 from cryptozavr.application.services.analytics_service import AnalyticsService
 from cryptozavr.domain.exceptions import DomainError, ValidationError
 from cryptozavr.domain.value_objects import Timeframe
-from cryptozavr.mcp.dtos import AnalysisResultDTO
+from cryptozavr.mcp.dtos import AnalysisReportDTO, AnalysisResultDTO
 from cryptozavr.mcp.errors import domain_to_tool_error
 from cryptozavr.mcp.lifespan_state import get_analytics_service
+
+_SNAPSHOT_STRATEGIES: tuple[str, ...] = (
+    "vwap",
+    "support_resistance",
+    "volatility_regime",
+)
 
 # Module-level singleton — avoids B008 (function call in default argument).
 _ANALYTICS_SVC: AnalyticsService = Depends(get_analytics_service)
@@ -221,8 +227,81 @@ def register_volatility_regime_tool(mcp: FastMCP) -> None:
         )
 
 
+def register_analyze_snapshot_tool(mcp: FastMCP) -> None:
+    """Attach analyze_snapshot composite tool (all 3 strategies)."""
+
+    @mcp.tool(
+        name="analyze_snapshot",
+        description=(
+            "Composite analysis: runs VWAP, support/resistance, and "
+            "volatility-regime strategies over the same OHLCV fetch and "
+            "returns a single AnalysisReport. Cheaper than 3 separate "
+            "tool calls (one OHLCV fetch shared across strategies). "
+            "Emits progress updates between strategies."
+        ),
+        tags={"analytics", "public", "read-only", "composite"},
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+        },
+        timeout=60.0,
+        meta={
+            "strategies": list(_SNAPSHOT_STRATEGIES),
+            "version": __version__,
+        },
+    )
+    async def analyze_snapshot(
+        venue: Annotated[str, _venue_field()],
+        symbol: Annotated[str, _symbol_field()],
+        timeframe: Annotated[str, _timeframe_field()],
+        ctx: Context,
+        limit: Annotated[int, _limit_field(200)] = 200,
+        force_refresh: Annotated[bool, _force_refresh_field()] = False,
+        service: AnalyticsService = _ANALYTICS_SVC,
+    ) -> AnalysisReportDTO:
+        tf = _parse_timeframe(timeframe)
+        total_steps = len(_SNAPSHOT_STRATEGIES) + 1  # +1 for OHLCV fetch
+        await ctx.info(
+            f"analyze_snapshot venue={venue} symbol={symbol} "
+            f"timeframe={timeframe} limit={limit} force_refresh={force_refresh}",
+        )
+        await ctx.report_progress(
+            progress=0,
+            total=total_steps,
+            message="fetching OHLCV",
+        )
+        try:
+            report, reason_codes = await service.analyze(
+                venue=venue,
+                symbol=symbol,
+                timeframe=tf,
+                limit=limit,
+                force_refresh=force_refresh,
+                strategy_names=_SNAPSHOT_STRATEGIES,
+            )
+        except DomainError as exc:
+            raise domain_to_tool_error(exc) from exc
+
+        for idx, strategy in enumerate(_SNAPSHOT_STRATEGIES, start=1):
+            await ctx.report_progress(
+                progress=idx,
+                total=total_steps,
+                message=f"{strategy} done",
+            )
+
+        await ctx.report_progress(
+            progress=total_steps,
+            total=total_steps,
+            message="complete",
+        )
+        await _warn_on_quality(ctx, reason_codes)
+        return AnalysisReportDTO.from_domain(report, reason_codes)
+
+
 def register_analytics_tools(mcp: FastMCP) -> None:
-    """Register all single-strategy analytics tools."""
+    """Register all analytics tools (3 single-strategy + snapshot)."""
     register_compute_vwap_tool(mcp)
     register_support_resistance_tool(mcp)
     register_volatility_regime_tool(mcp)
+    register_analyze_snapshot_tool(mcp)
