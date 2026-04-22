@@ -1,8 +1,11 @@
-"""Thin async generator wrapper around ccxt.pro.kucoin for WS ticker streams.
+"""Thin async generator wrapper around ccxt.pro.kucoin for live price streams.
 
-ccxt.pro handles reconnects + exponential backoff internally. We
-translate ccxt.BadSymbol -> SymbolNotFoundError; everything else
-propagates.
+Uses the WebSocket trades channel (not ticker — KuCoin's ticker channel
+returns frames without price data). Each trade yields a (price, ts_ms) pair;
+callers receive one event per executed trade.
+
+ccxt.pro handles reconnects + exponential backoff internally. We translate
+ccxt.BadSymbol -> SymbolNotFoundError; everything else -> ProviderUnavailableError.
 """
 
 from __future__ import annotations
@@ -42,7 +45,7 @@ class KucoinWsProvider:
         ccxt_symbol = _native_to_ccxt(native_symbol)
         while True:
             try:
-                raw = await exchange.watch_ticker(ccxt_symbol)
+                trades = await exchange.watch_trades(ccxt_symbol)
             except ccxt_pro.BadSymbol as exc:
                 raise SymbolNotFoundError(user_input=native_symbol, venue="kucoin") from exc
             except ccxt_pro.NetworkError as exc:
@@ -50,11 +53,12 @@ class KucoinWsProvider:
                 continue
             except Exception as exc:
                 raise ProviderUnavailableError(f"kucoin WS failure: {exc}") from exc
-            last = raw.get("last")
-            ts = raw.get("timestamp")
-            if last is None or ts is None:
-                continue
-            yield Decimal(str(last)), int(ts)
+            for trade in trades:
+                price = trade.get("price")
+                ts = trade.get("timestamp")
+                if price is None or ts is None:
+                    continue
+                yield Decimal(str(price)), int(ts)
 
     async def close(self) -> None:
         if self._exchange is not None:
