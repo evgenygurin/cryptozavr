@@ -171,6 +171,13 @@ class CCXTProvider(BaseProvider):
             return RateLimitExceededError(str(exc))
         if isinstance(exc, ccxt_async.NetworkError):
             return ProviderUnavailableError(str(exc))
+        if isinstance(exc, ccxt_async.BadSymbol):
+            from cryptozavr.domain.exceptions import SymbolNotFoundError
+
+            return SymbolNotFoundError(
+                user_input=str(exc).split("'")[1] if "'" in str(exc) else str(exc),
+                venue=self.venue_id.value,
+            )
         return exc
 
     async def close(self) -> None:

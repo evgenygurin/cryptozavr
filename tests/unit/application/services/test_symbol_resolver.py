@@ -77,7 +77,14 @@ class TestSymbolResolver:
         with pytest.raises(VenueNotSupportedError):
             resolver.resolve(user_input="BTC-USDT", venue="binance")
 
-    def test_unknown_symbol_raises(self, registry: SymbolRegistry) -> None:
+    def test_unknown_symbol_auto_registers(self, registry: SymbolRegistry) -> None:
+        resolver = SymbolResolver(registry)
+        sym = resolver.resolve(user_input="DOGE-USDT", venue="kucoin")
+        assert sym.base == "DOGE"
+        assert sym.quote == "USDT"
+        assert sym.native_symbol == "DOGE-USDT"
+
+    def test_unparseable_symbol_raises(self, registry: SymbolRegistry) -> None:
         resolver = SymbolResolver(registry)
         with pytest.raises(SymbolNotFoundError):
-            resolver.resolve(user_input="DOGE-USDT", venue="kucoin")
+            resolver.resolve(user_input="???", venue="kucoin")

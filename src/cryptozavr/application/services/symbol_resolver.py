@@ -67,6 +67,15 @@ class SymbolResolver:
                 if sym is not None:
                     return sym
 
+        # 4. Auto-register: if the input is parseable as BASE-QUOTE, register and return.
+        parsed = self._parse_base_quote(normalised)
+        if parsed is not None:
+            base, quote = parsed
+            native = f"{base}-{quote}"
+            return self._registry.get(
+                venue_id, base, quote, market_type=MarketType.SPOT, native_symbol=native
+            )
+
         raise SymbolNotFoundError(user_input=user_input, venue=venue)
 
     @staticmethod
@@ -75,6 +84,19 @@ class SymbolResolver:
             return VenueId(venue)
         except ValueError as exc:
             raise VenueNotSupportedError(venue=venue) from exc
+
+    @staticmethod
+    def _parse_base_quote(normalised: str) -> tuple[str, str] | None:
+        """Return (base, quote) if normalised is a parseable BASE-QUOTE string."""
+        for sep in ("-", "/"):
+            if sep in normalised:
+                base, _, quote = normalised.partition(sep)
+                if base and quote:
+                    return base, quote
+        for quote in _DEFAULT_QUOTES:
+            if normalised.endswith(quote) and len(normalised) > len(quote):
+                return normalised[: -len(quote)], quote
+        return None
 
     @staticmethod
     def _variants(normalised: str) -> list[str]:
