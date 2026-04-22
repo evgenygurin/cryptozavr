@@ -54,6 +54,7 @@ def register_validate_strategy_tool(mcp: FastMCP) -> None:
             "(pydantic field errors and domain invariant violations)."
         ),
         tags={"strategy", "validation", "read-only", "phase-2"},
+        timeout=30.0,
         annotations={
             "readOnlyHint": True,
             "idempotentHint": True,

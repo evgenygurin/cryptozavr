@@ -485,6 +485,7 @@ def register_strategy_compute_tools(mcp: FastMCP) -> None:
             "from the spec itself."
         ),
         tags={"strategy", "compute", "phase-2"},
+        timeout=120.0,
         annotations={
             "readOnlyHint": True,
             "idempotentHint": False,
@@ -515,6 +516,7 @@ def register_strategy_compute_tools(mcp: FastMCP) -> None:
             "comparison dict; the full ordered results list preserves all."
         ),
         tags={"strategy", "compute", "phase-2"},
+        timeout=300.0,
         annotations={
             "readOnlyHint": True,
             "idempotentHint": False,
@@ -546,6 +548,7 @@ def register_strategy_compute_tools(mcp: FastMCP) -> None:
             "exercise offline."
         ),
         tags={"strategy", "compute", "phase-2"},
+        timeout=90.0,
         annotations={
             "readOnlyHint": True,
             "idempotentHint": False,
@@ -571,6 +574,7 @@ def register_strategy_compute_tools(mcp: FastMCP) -> None:
             "repository failure."
         ),
         tags={"strategy", "compute", "phase-2"},
+        timeout=30.0,
         annotations={
             "readOnlyHint": False,
             "idempotentHint": True,

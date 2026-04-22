@@ -129,6 +129,7 @@ def register_strategy_read_only_tools(mcp: FastMCP) -> None:
             "empty list with `error` populated."
         ),
         tags={"strategy", "read-only", "phase-2"},
+        timeout=30.0,
         annotations={
             "readOnlyHint": True,
             "idempotentHint": True,
@@ -176,6 +177,7 @@ def register_strategy_read_only_tools(mcp: FastMCP) -> None:
             "malformed input returns error only, leaving markdown/sections empty."
         ),
         tags={"strategy", "read-only", "phase-2"},
+        timeout=30.0,
         annotations={
             "readOnlyHint": True,
             "idempotentHint": True,
@@ -211,6 +213,7 @@ def register_strategy_read_only_tools(mcp: FastMCP) -> None:
             "malformed, returns errors only with equal=False."
         ),
         tags={"strategy", "read-only", "phase-2"},
+        timeout=30.0,
         annotations={
             "readOnlyHint": True,
             "idempotentHint": True,
